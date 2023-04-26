@@ -327,7 +327,7 @@ def check_pupil_crossing(dflist):
 #Read in the relevant data from Manal's encoder transformation spreadsheet. You'll need to update the filepath below to your personal machine.
 def read_encoder_coeffs_from_file():
     # encoder_converter_filepath = 'New Encoder Decoder 03042023.xlsx'
-    encoder_converter_filepath = 'New Encoder Decoder 03042023.xlsx'
+    encoder_converter_filepath = 'files/New Encoder Decoder 03042023.xlsx'
     spreadsheet = pd.read_excel(encoder_converter_filepath,sheet_name='Encoder Mapping Mar 4',skiprows=3,usecols='H:M')
 
     coeffs_encoder_to_5DOF = spreadsheet.loc[0:10]
