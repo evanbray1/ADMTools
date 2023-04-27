@@ -516,18 +516,24 @@ def pose_update_with_FDPR_results(df,shifts_from_FDPR,focal_length,GSA_angle_WCS
 
     return df_after_fitting_FDPR_shifts,endpoints_residuals_sMPA,best_fit_deltas
 
-def optimize_5DOF_rotation_for_PAT(current_AC_AZ, current_AC_EL, desired_AC_AZ, desired_AC_EL, current_GSARX, current_GSARY):
+def optimize_5DOF_rotation_for_PAT(current_AC_AZ, current_AC_EL, desired_AC_AZ, desired_AC_EL, current_GSARX, current_GSARY,print_details=False):
     transformation_matrix_az_el = np.array([[0.824126, -0.56641],
                                             [0.566407, 0.824126]])
     optimal_GSARX,optimal_GSARY = np.array([current_GSARX,current_GSARY]) +\
         np.matmul(np.array([desired_AC_AZ,desired_AC_EL]) - np.array([current_AC_AZ,current_AC_EL]),transformation_matrix_az_el)
+    if print_details == True:
+        print('Starting GSARX/RY: ',current_GSARX, current_GSARY)
+        print('Optimal GSARX/RY: ',optimal_GSARX,optimal_GSARY)
     return optimal_GSARX,optimal_GSARY
 
-def optimize_5DOF_translation_for_PAT(current_X_CENTR, current_Y_CENTR, desired_X_CENTR, desired_Y_CENTR, current_HTSAX, current_VTSA):
+def optimize_5DOF_translation_for_PAT(current_X_CENTR, current_Y_CENTR, desired_X_CENTR, desired_Y_CENTR, current_HTSAX, current_VTSA,print_details=False):
     transformation_matrix_x_y = np.array([[3.853e-2,-2.897e-2],
                                           [-2.953e-2,-3.862e-2]])
     optimal_HTSAX,optimal_VTSA = np.array([current_HTSAX,current_VTSA]) +\
         np.matmul(np.array([desired_X_CENTR,desired_Y_CENTR]) - np.array([current_X_CENTR, current_Y_CENTR]),transformation_matrix_x_y)
+    if print_details == True:
+        print('Starting HTSA/VTSA: ',current_HTSAX, current_VTSA)
+        print('Optimal HTSA/VTSA: ',optimal_HTSAX,optimal_VTSA)
     return optimal_HTSAX,optimal_VTSA
 
 def convert_pose_encoders_to_pose_actual(pose_encoders):
@@ -546,3 +552,25 @@ def convert_df_to_encoder_space(df,pose_select=None):
     for pose in poses_to_convert:
         df_encoder_space = pd.concat([df_encoder_space,calculate_encoders_from_5DOF(pd.DataFrame(df.loc[pose]).T)])
     return df_encoder_space
+
+def update_p_null_PATB_encoders(df_PATB_encoders,p_null_offset):
+    optimal_gsarx_patb, optimal_gsary_patb = optimize_5DOF_rotation_for_PAT(df_PATB_encoders['PATB AC AZ'].values[0], df_PATB_encoders['PATB AC EL'].values[0], 
+                                         df_PATB_encoders['sMATF AC AZ'].values[0],df_PATB_encoders['sMATF AC EL'].values[0], 
+                                         df_PATB_encoders['Rx'].values[0], df_PATB_encoders['Ry'].values[0],print_details=True)
+
+    optimal_htsax_patb, optimal_vtsa_patb = optimize_5DOF_translation_for_PAT(df_PATB_encoders['PATB Pri LED X'].values[0], df_PATB_encoders['PATB Pri LED Y'].values[0], 
+                                             df_PATB_encoders['sMATF Pri LED X'].values[0],df_PATB_encoders['sMATF Pri LED Y'].values[0], 
+                                             df_PATB_encoders['X'].values[0], df_PATB_encoders['Y'].values[0],print_details=True)
+    
+    additional_patb_z_shift = -1*p_null_offset[1]*np.sin(np.deg2rad(optimal_gsarx_patb - df_PATB_encoders['Rx'].values[0])) +\
+                                p_null_offset[0]*np.sin(np.deg2rad(optimal_gsary_patb - df_PATB_encoders['Ry'].values[0]))
+    #print('Effective change in Z-position of PATB after applying optimal rotations: ',round(additional_patb_z_shift,4))
+    
+    #Update the dataframe with the new, optimal values.
+    df_PATB_encoders['z_PATB'] += additional_patb_z_shift
+    df_PATB_encoders[['X','Y','Rx','Ry']] = [optimal_htsax_patb,optimal_vtsa_patb,optimal_gsarx_patb,optimal_gsary_patb]
+    df_PATB_encoders[['PATB AC AZ','PATB AC EL','PATB Pri LED X','PATB Pri LED Y']] = df_PATB_encoders[['sMATF AC AZ','sMATF AC EL','sMATF Pri LED X','sMATF Pri LED Y']]
+    df_PATB_encoders[['PATB AC AZ','PATB AC EL','PATB Pri LED X','PATB Pri LED Y']] = df_PATB_encoders[['sMATF AC AZ','sMATF AC EL','sMATF Pri LED X','sMATF Pri LED Y']]
+    df_PATB_encoders[['Optimized?']] = True
+    
+    return df_PATB_encoders
