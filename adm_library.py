@@ -553,7 +553,7 @@ def convert_df_to_encoder_space(df,pose_select=None):
         df_encoder_space = pd.concat([df_encoder_space,calculate_encoders_from_5DOF(pd.DataFrame(df.loc[pose]).T)])
     return df_encoder_space
 
-def update_p_null_PATB_encoders(df_PATB_encoders,p_null_offset):
+def optimize_p_null_PATB_encoders(df_PATB_encoders,p_null_offset):
     optimal_gsarx_patb, optimal_gsary_patb = optimize_5DOF_rotation_for_PAT(df_PATB_encoders['PATB AC AZ'].values[0], df_PATB_encoders['PATB AC EL'].values[0], 
                                          df_PATB_encoders['sMATF AC AZ'].values[0],df_PATB_encoders['sMATF AC EL'].values[0], 
                                          df_PATB_encoders['Rx'].values[0], df_PATB_encoders['Ry'].values[0],print_details=True)
@@ -569,7 +569,6 @@ def update_p_null_PATB_encoders(df_PATB_encoders,p_null_offset):
     #Update the dataframe with the new, optimal values.
     df_PATB_encoders['z_PATB'] += additional_patb_z_shift
     df_PATB_encoders[['X','Y','Rx','Ry']] = [optimal_htsax_patb,optimal_vtsa_patb,optimal_gsarx_patb,optimal_gsary_patb]
-    df_PATB_encoders[['PATB AC AZ','PATB AC EL','PATB Pri LED X','PATB Pri LED Y']] = df_PATB_encoders[['sMATF AC AZ','sMATF AC EL','sMATF Pri LED X','sMATF Pri LED Y']]
     df_PATB_encoders[['PATB AC AZ','PATB AC EL','PATB Pri LED X','PATB Pri LED Y']] = df_PATB_encoders[['sMATF AC AZ','sMATF AC EL','sMATF Pri LED X','sMATF Pri LED Y']]
     df_PATB_encoders[['Optimized?']] = True
     
