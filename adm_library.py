@@ -574,3 +574,26 @@ def update_p_null_PATB_encoders(df_PATB_encoders,p_null_offset):
     df_PATB_encoders[['Optimized?']] = True
     
     return df_PATB_encoders
+
+def get_data_from_ADM_log(plateau,z_type,filepath = 'files/ADM Ops Log.xlsx',print_details=False):
+    spreadsheet = pd.read_excel(filepath,sheet_name='Position Log - Ball',skiprows=0,usecols='A:Z',index_col=5)
+    spreadsheet = spreadsheet[(spreadsheet['Plateau'] == plateau) & (spreadsheet['Final?'] == 'Y')]
+
+    df_parsed_from_ADMLog = pd.DataFrame(dict({'X':spreadsheet.loc['PATB LED pri']['5DOF X'], 'Y':spreadsheet.loc['PATB LED pri']['5DOF Y'],'Z':spreadsheet.loc['PATB LED pri']['5DOF Z'],
+                                                  'Rx':spreadsheet.loc['PATB LED pri']['5DOF Rx'],'Ry':spreadsheet.loc['PATB LED pri']['5DOF Ry'],
+                                                  'z_sMATF':spreadsheet.loc['sMATF '+z_type]['Range (m)']*1000.,
+                                                  'z_PATB':spreadsheet.loc['PATB '+z_type+' pri']['Range (m)']*1000.,
+                                                  'z_type':z_type,
+                                                  'sMATF AC AZ':spreadsheet.loc['sMATF mirror']['AC AZ (deg)'],
+                                                  'sMATF AC EL':spreadsheet.loc['sMATF mirror']['AC EL (deg)'],
+                                                  'PATB AC AZ':spreadsheet.loc['PATB mirror']['AC AZ (deg)'],
+                                                  'PATB AC EL':spreadsheet.loc['PATB mirror']['AC EL (deg)'],
+                                                  'sMATF Pri LED X':spreadsheet.loc['sMATF LED pri']['X centr (pix)'],
+                                                  'sMATF Pri LED Y':spreadsheet.loc['sMATF LED pri']['Y centr (pix)'],
+                                                  'PATB Pri LED X':spreadsheet.loc['PATB LED pri']['X centr (pix)'],
+                                                  'PATB Pri LED Y':spreadsheet.loc['PATB LED pri']['Y centr (pix)'],
+                                                  'date':spreadsheet.loc['sMATF mirror']['Date']
+                                                 }),index=['PATB'])
+    if print_details == True:
+        print(df_parsed_from_ADMLog.squeeze())
+    return df_parsed_from_ADMLog
