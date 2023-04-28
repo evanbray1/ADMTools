@@ -574,7 +574,7 @@ def optimize_p_null_PATB_encoders(df_PATB_encoders,p_null_offset):
     
     return df_PATB_encoders
 
-def get_data_from_ADM_log(plateau,z_type,filepath = 'files/ADM Ops Log.xlsx',print_details=False):
+def get_data_from_ADM_log(plateau,z_type,index_name,filepath = 'files/ADM Ops Log.xlsx',print_details=False):
     spreadsheet = pd.read_excel(filepath,sheet_name='Position Log - Ball',skiprows=0,usecols='A:Z',index_col=5)
     spreadsheet = spreadsheet[(spreadsheet['Plateau'] == plateau) & (spreadsheet['Final?'] == 'Y')]
 
@@ -592,7 +592,7 @@ def get_data_from_ADM_log(plateau,z_type,filepath = 'files/ADM Ops Log.xlsx',pri
                                                   'PATB Pri LED X':spreadsheet.loc['PATB LED pri']['X centr (pix)'],
                                                   'PATB Pri LED Y':spreadsheet.loc['PATB LED pri']['Y centr (pix)'],
                                                   'date':spreadsheet.loc['sMATF mirror']['Date']
-                                                 }),index=['PATB'])
+                                                 }),index=[index_name])
     if print_details == True:
         print(df_parsed_from_ADMLog.squeeze())
     return df_parsed_from_ADMLog
