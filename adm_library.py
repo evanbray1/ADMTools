@@ -596,3 +596,80 @@ def get_data_from_ADM_log(plateau,z_type,index_name,filepath = 'files/ADM Ops Lo
     if print_details == True:
         print(df_parsed_from_ADMLog.squeeze())
     return df_parsed_from_ADMLog
+
+def write_new_poses_to_Excel(filename,new_pose_name,columns,GSA_angle_WCS_deg,df,df_encoders,
+                             df_update,df_update_encoders,focal_length,
+                             p_null_PATB_baseline_encoder_original,
+                             p_null_PATB_update_encoder_original):
+    
+    charstr='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    chars=list(charstr)
+    #nums=[str(i) for i in range(1,26)]
+
+    startrow = 16
+    startcol = 1
+    index_names = [val for val in df.index if 'PDI' in val or 'PR' in val]
+
+    gsa_rot = R.from_euler('X',[GSA_angle_WCS_deg], degrees=True)
+    # uvec = np.array([0.,0.,dz_update]+p_null_offset)
+    #rot_uvec = gsa_rot.apply(uvec) #np.dot(gsa_rot.as_matrix(),uvec)
+
+    filename = filename
+    sheet1_name = 'baseline'
+    sheet2_name = 'update'
+    with pd.ExcelWriter(filename) as writer:  
+        df.loc[index_names].to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol)
+        df_encoders.to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol+12)   
+        sheet = writer.sheets[sheet1_name]
+        sheet[f'{chars[startcol+12]}{startrow}']='Encoders'
+        sheet[f'{chars[startcol]}{startrow}']='True positions'
+        sheet['B1'] = new_pose_name
+        sheet['B2'] = '(temporary string)'
+        sheet['A27'] = 'Corresponding field points in GSA'
+        sheet['A3'] = 'Track length'
+        sheet['B3'] = focal_length+110
+    #     sheet['A6'] = 'sMPA offset to WCS'
+        newdf = df[df.index=='sMPA'][['X','Y','Z','uvec_X','uvec_Y','uvec_Z']]
+        newdf.to_excel(writer,sheet_name=sheet1_name,startrow=4,startcol=0)
+        sheet['A10'] = 'GSA angle to WCS'
+        sheet['B10'] = GSA_angle_WCS_deg
+        newdf = df[df.index=='sMask'][['X','Y','Z']]
+        newdf.loc['sMask',['X','Y','Z']] = gsa_rot.inv().apply(newdf.loc['sMask',['X','Y','Z']].values.astype(float))
+        newdf.to_excel(writer,sheet_name=sheet1_name,startrow=11,startcol=1)
+        endpoints = compute_endpoints(df.loc[index_names],pose_select='P')
+        gsa_coordinates = pd.DataFrame(gsa_rot.inv().apply(endpoints),columns=['X','Y','Z'])
+        gsa_coordinates.index = index_names
+        gsa_coordinates.to_excel(writer,sheet_name=sheet1_name,startrow=27,startcol=1)
+
+        sheet['B41'] = 'ADM measurements'
+        p_null_PATB_baseline_encoder_original.to_excel(writer, sheet_name=sheet1_name,startrow=43,startcol=1)
+
+        #Writing updated pose info to the 2nd tab
+        df_update.loc[index_names].to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol)
+        df_update_encoders.to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol+12)   
+        sheet = writer.sheets[sheet2_name]
+        sheet[f'{chars[startcol+12]}{startrow}']='Encoders'
+        sheet[f'{chars[startcol]}{startrow}']='True positions'
+        sheet['B1'] = new_pose_name
+        sheet['B2'] = '(Temporary string)'
+        sheet['A27'] = 'Corresponding field points in GSA'
+        sheet['A3'] = 'Track length'
+        sheet['B3'] = focal_length+110
+    #     sheet['A6'] = 'sMPA offset to WCS'
+        newdf = df_update[df_update.index=='sMPA'][['X','Y','Z','uvec_X','uvec_Y','uvec_Z']]
+        newdf.to_excel(writer,sheet_name=sheet2_name,startrow=4,startcol=0)
+        sheet['A10'] = 'GSA angle to WCS'
+        sheet['B10'] = GSA_angle_WCS_deg
+        newdf = df_update[df_update.index=='sMask'][['X','Y','Z']]
+        newdf.loc['sMask',['X','Y','Z']] = gsa_rot.inv().apply(newdf.loc['sMask',['X','Y','Z']].values.astype(float))
+        newdf.to_excel(writer,sheet_name=sheet2_name,startrow=11,startcol=1)
+        endpoints = compute_endpoints(df_update.loc[index_names],pose_select='P')
+        gsa_coordinates = pd.DataFrame(gsa_rot.inv().apply(endpoints),columns=['X','Y','Z'])
+        gsa_coordinates.index = index_names
+        gsa_coordinates.to_excel(writer,sheet_name=sheet2_name,startrow=27,startcol=1)
+
+        sheet['B41'] = 'ADM measurements'
+        p_null_PATB_update_encoder_original.to_excel(writer, sheet_name=sheet2_name,startrow=43,startcol=1)
+        
+        print('**Writing to Excel complete**')
+
