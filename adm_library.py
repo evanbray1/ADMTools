@@ -487,8 +487,8 @@ def pose_update_with_FDPR_results(df,shifts_from_FDPR,focal_length,GSA_angle_WCS
     bounds = ((-10,-10,-10,-1,-1),
               (10,10,10,1,1))
 
-    #endpoints_initial_guess = convert_endpoints_to_sMPA_frame(compute_endpoints(modify_poses(initial_guesses,df,focal_length,GSA_angle_WCS_deg)),translation_to_sMPA,rotation_from_sMPA_to_5DOF)
-    #print('Initial guess for endpoints (sMPA frame): \n',endpoints_initial_guess,'\n')
+    endpoints_residuals_sMPA_baseline = endpoints_sMPA_nominal - endpoints_sMPA
+    print('Residuals (in sMPA frame) baseline: \n',endpoints_residuals_sMPA_baseline,'\n')
 
     #Important caveat here, curve_fit only handles 1D arrays.
     #So we have to strip our dataframe down to a 2D array and then flatten it, and reshape it later.
@@ -498,7 +498,7 @@ def pose_update_with_FDPR_results(df,shifts_from_FDPR,focal_length,GSA_angle_WCS
                                                 rotation_from_sMPA_to_5DOF=rotation_from_sMPA_to_5DOF),
                                                 df,endpoints_sMPA_nominal.values.ravel(),p0=initial_guesses,bounds=bounds)
 
-    print('Best-fit (X,Y,Z,Rx,Ry) deltas to apply to real-space poses: \n',best_fit_deltas,'\n')
+    print('Best-fit (X,Y,Z,Rx,Ry) deltas to apply to real-space poses: \n',np.round(best_fit_deltas,4),'\n')
 
     #Update the poses in the 5DOF frame
     df_after_fitting_FDPR_shifts = modify_poses(best_fit_deltas,df,focal_length,GSA_angle_WCS_deg)
@@ -512,7 +512,7 @@ def pose_update_with_FDPR_results(df,shifts_from_FDPR,focal_length,GSA_angle_WCS
 
     #Calculate residuals between nominal and best-fit
     endpoints_residuals_sMPA = endpoints_sMPA_nominal - endpoints_sMPA_best_fit
-    print('Residuals (in sMPA frame) after incorporating the best-fit (x,y,z,Rx,Ry) shift to all poses: \n',endpoints_residuals_sMPA)
+    print('Residuals (in sMPA frame) after incorporating the best-fit (x,y,z,Rx,Ry) shift to all poses: \n',np.round(endpoints_residuals_sMPA,3),'\n')
 
     return df_after_fitting_FDPR_shifts,endpoints_residuals_sMPA,best_fit_deltas
 
@@ -599,8 +599,8 @@ def get_data_from_ADM_log(plateau,z_type,index_name,filepath = 'files/ADM Ops Lo
 
 def write_new_poses_to_Excel(filename,new_pose_name,columns,GSA_angle_WCS_deg,df,df_encoders,
                              df_update,df_update_encoders,focal_length,
-                             p_null_PATB_baseline_encoder_original,
-                             p_null_PATB_update_encoder_original):
+                             p_null_PATB_baseline_encoder_original=None,
+                             p_null_PATB_update_encoder_original=None):
     
     charstr='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     chars=list(charstr)
@@ -633,16 +633,18 @@ def write_new_poses_to_Excel(filename,new_pose_name,columns,GSA_angle_WCS_deg,df
         newdf.to_excel(writer,sheet_name=sheet1_name,startrow=4,startcol=0)
         sheet['A10'] = 'GSA angle to WCS'
         sheet['B10'] = GSA_angle_WCS_deg
-        newdf = df[df.index=='sMask'][['X','Y','Z']]
-        newdf.loc['sMask',['X','Y','Z']] = gsa_rot.inv().apply(newdf.loc['sMask',['X','Y','Z']].values.astype(float))
-        newdf.to_excel(writer,sheet_name=sheet1_name,startrow=11,startcol=1)
+        if 'sMask' in df.index:
+            newdf = df[df.index=='sMask'][['X','Y','Z']]
+            newdf.loc['sMask',['X','Y','Z']] = gsa_rot.inv().apply(newdf.loc['sMask',['X','Y','Z']].values.astype(float))
+            newdf.to_excel(writer,sheet_name=sheet1_name,startrow=11,startcol=1)
         endpoints = compute_endpoints(df.loc[index_names],pose_select='P')
         gsa_coordinates = pd.DataFrame(gsa_rot.inv().apply(endpoints),columns=['X','Y','Z'])
         gsa_coordinates.index = index_names
         gsa_coordinates.to_excel(writer,sheet_name=sheet1_name,startrow=27,startcol=1)
 
-        sheet['B41'] = 'ADM measurements'
-        p_null_PATB_baseline_encoder_original.to_excel(writer, sheet_name=sheet1_name,startrow=43,startcol=1)
+        if p_null_PATB_baseline_encoder_original is not None:
+            sheet['B41'] = 'ADM measurements'
+            p_null_PATB_baseline_encoder_original.to_excel(writer, sheet_name=sheet1_name,startrow=43,startcol=1)
 
         #Writing updated pose info to the 2nd tab
         df_update.loc[index_names].to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol)
@@ -660,16 +662,18 @@ def write_new_poses_to_Excel(filename,new_pose_name,columns,GSA_angle_WCS_deg,df
         newdf.to_excel(writer,sheet_name=sheet2_name,startrow=4,startcol=0)
         sheet['A10'] = 'GSA angle to WCS'
         sheet['B10'] = GSA_angle_WCS_deg
-        newdf = df_update[df_update.index=='sMask'][['X','Y','Z']]
-        newdf.loc['sMask',['X','Y','Z']] = gsa_rot.inv().apply(newdf.loc['sMask',['X','Y','Z']].values.astype(float))
-        newdf.to_excel(writer,sheet_name=sheet2_name,startrow=11,startcol=1)
+        if 'sMask' in df_update.index:
+            newdf = df_update[df_update.index=='sMask'][['X','Y','Z']]
+            newdf.loc['sMask',['X','Y','Z']] = gsa_rot.inv().apply(newdf.loc['sMask',['X','Y','Z']].values.astype(float))
+            newdf.to_excel(writer,sheet_name=sheet2_name,startrow=11,startcol=1)
         endpoints = compute_endpoints(df_update.loc[index_names],pose_select='P')
         gsa_coordinates = pd.DataFrame(gsa_rot.inv().apply(endpoints),columns=['X','Y','Z'])
         gsa_coordinates.index = index_names
         gsa_coordinates.to_excel(writer,sheet_name=sheet2_name,startrow=27,startcol=1)
 
-        sheet['B41'] = 'ADM measurements'
-        p_null_PATB_update_encoder_original.to_excel(writer, sheet_name=sheet2_name,startrow=43,startcol=1)
-        
+        if p_null_PATB_update_encoder_original is not None:
+            sheet['B41'] = 'ADM measurements'
+            p_null_PATB_update_encoder_original.to_excel(writer, sheet_name=sheet2_name,startrow=43,startcol=1)
+            
         print('**Writing to Excel complete**')
 
