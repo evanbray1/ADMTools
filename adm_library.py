@@ -252,6 +252,20 @@ def compute_endpoints(df,pose_select='PR'):
         newdf.loc[pose,'endpt_Z'] = df.loc[pose,'Z']+df.loc[pose,'uvec_Z']
     return newdf
 
+def compute_endpoints_with_FDPR_shifts(df,shifts_from_FDPR,pose_select='PR'):
+    sMPA_rotmat = R.from_euler('XYZ',df.loc['sMPA',['Rx','Ry','Rz']].values.astype(float), degrees=True)
+    endpoints = compute_endpoints(df)
+    endpoints_with_shift = pd.DataFrame(columns=['endpt_X','endpt_Y','endpt_Z'])
+    for pose in [val for val in df.index if pose_select in val]:
+        dz = shifts_from_FDPR.loc[pose,['chief ray dz (um)']].values.astype(float)/1000.
+        vec = df.loc[pose,['uvec_X','uvec_Y','uvec_Z']].values.astype(float)
+        normvec = vec/np.linalg.norm(vec)
+        newvec1 = endpoints.loc[pose] - normvec*dz
+        dxdy = np.array([shifts_from_FDPR.loc[pose,['dx (um)']][0],shifts_from_FDPR.loc[pose,['dy (um)']][0],0.])/1000.
+        newvec2 = newvec1 - sMPA_rotmat.apply(dxdy)
+        endpoints_with_shift.loc[pose] = newvec2
+    return endpoints_with_shift
+
 def compute_endpoint_errors(df,df1,pose_select='PR'):
     newdf = pd.DataFrame()
     newdf1 = pd.DataFrame()
@@ -451,9 +465,9 @@ def generate_endpoints_for_fitting(df,dx,dy,dz,drx,dry,focal_length,GSA_angle_WC
     #    update_uvec(df_temp,pose,focal_length,GSA_angle_WCS_deg)
 
     endpoints_temp_5DOF = compute_endpoints(df_temp)    #With the current shifts, calculate the endpoints in the 5DOF frame
-    endpoints_temp_sMPA = convert_endpoints_to_sMPA_frame(endpoints_temp_5DOF, translation_to_sMPA, rotation_from_sMPA_to_5DOF) #Convert those endpoints to the sMPA frame
+    #endpoints_temp_sMPA = convert_endpoints_to_sMPA_frame(endpoints_temp_5DOF, translation_to_sMPA, rotation_from_sMPA_to_5DOF) #Convert those endpoints to the sMPA frame
 
-    return endpoints_temp_sMPA.values.ravel() #We have to flatten the array so that curve_fit doesn't throw a fit. We'll reshape it later.
+    return endpoints_temp_5DOF.values.ravel() #We have to flatten the array so that curve_fit doesn't throw a fit. We'll reshape it later.
 
 def convert_endpoints_to_sMPA_frame(df_endpoints_5DOF,translation_to_sMPA,rotation_from_sMPA_to_5DOF,pose_select='PR'):
     df_endpoints_sMPA = df_endpoints_5DOF.copy()
@@ -471,24 +485,26 @@ def convert_endpoints_to_sMPA_frame(df_endpoints_5DOF,translation_to_sMPA,rotati
 
     return df_endpoints_sMPA
 
-
 def pose_update_with_FDPR_results(df,shifts_from_FDPR,focal_length,GSA_angle_WCS_deg,translation_to_sMPA,rotation_from_sMPA_to_5DOF):
     endpoints_5DOF = compute_endpoints(df)
-    endpoints_sMPA = convert_endpoints_to_sMPA_frame(endpoints_5DOF,translation_to_sMPA,rotation_from_sMPA_to_5DOF)
+    #endpoints_sMPA = convert_endpoints_to_sMPA_frame(endpoints_5DOF,translation_to_sMPA,rotation_from_sMPA_to_5DOF)
 
     #Update the endpoints based on information from the FDPR team
-    endpoints_sMPA_nominal = endpoints_sMPA.copy()
-    for pose in [pose for pose in endpoints_sMPA.index if 'PR' in pose]:
-        endpoints_sMPA_nominal.loc[pose] -= shifts_from_FDPR.loc[pose,['dx (um)','dy (um)','chief ray dz (um)']].values/1000
+    endpoints_nominal = compute_endpoints_with_FDPR_shifts(df, shifts_from_FDPR)
+    #endpoints_nominal = endpoints_5DOF.copy()
+    #for pose in [pose for pose in endpoints_nominal.index if 'PR' in pose]:
+    #    endpoints_nominal.loc[pose] = create_error_vector_v2(endpoints_nominal.loc[pose],shifts_from_FDPR)
+        
+        #endpoints_sMPA_nominal.loc[pose] -= shifts_from_FDPR.loc[pose,['dx (um)','dy (um)','chief ray dz (um)']].values/1000
     #print('FDPR-adjusted nominal endpoint locations (sMPA frame): \n',endpoints_sMPA_nominal,'\n')
 
     #Initial guesses/bounds for translations and rotations in millimeters and degrees
-    initial_guesses = [0,0,0,0.0,0.0]
+    initial_guesses = [0.,0.,0.,0.,0.]
     bounds = ((-10,-10,-10,-1,-1),
               (10,10,10,1,1))
 
-    endpoints_residuals_sMPA_baseline = endpoints_sMPA_nominal - endpoints_sMPA
-    print('Residuals (in sMPA frame) baseline: \n',endpoints_residuals_sMPA_baseline,'\n')
+    endpoints_residuals_baseline = endpoints_nominal - endpoints_5DOF
+    print('Residuals (in sMPA frame) baseline: \n',endpoints_residuals_baseline,'\n')
 
     #Important caveat here, curve_fit only handles 1D arrays.
     #So we have to strip our dataframe down to a 2D array and then flatten it, and reshape it later.
@@ -496,7 +512,7 @@ def pose_update_with_FDPR_results(df,shifts_from_FDPR,focal_length,GSA_angle_WCS
                                                 GSA_angle_WCS_deg=GSA_angle_WCS_deg,
                                                 translation_to_sMPA=translation_to_sMPA,
                                                 rotation_from_sMPA_to_5DOF=rotation_from_sMPA_to_5DOF),
-                                                df,endpoints_sMPA_nominal.values.ravel(),p0=initial_guesses,bounds=bounds)
+                                                df,endpoints_nominal.values.ravel(),p0=initial_guesses,bounds=bounds)
 
     print('Best-fit (X,Y,Z,Rx,Ry) deltas to apply to real-space poses: \n',np.round(best_fit_deltas,4),'\n')
 
@@ -507,14 +523,14 @@ def pose_update_with_FDPR_results(df,shifts_from_FDPR,focal_length,GSA_angle_WCS
     #print('New poses (in real space): \n',df_after_fitting_FDPR_shifts.loc[poses_to_display,['X','Y','Z','Rx','Ry']],'\n')
 
     #Calculate the endpoints of this new best-fit set of poses within the sMPA frame
-    endpoints_sMPA_best_fit = convert_endpoints_to_sMPA_frame(compute_endpoints(df_after_fitting_FDPR_shifts),translation_to_sMPA,rotation_from_sMPA_to_5DOF)
+    endpoints_best_fit = compute_endpoints(df_after_fitting_FDPR_shifts)
     #print('Best-fit endpoints (sMPA frame): \n',endpoints_sMPA_best_fit,'\n')
 
     #Calculate residuals between nominal and best-fit
-    endpoints_residuals_sMPA = endpoints_sMPA_nominal - endpoints_sMPA_best_fit
-    print('Residuals (in sMPA frame) after incorporating the best-fit (x,y,z,Rx,Ry) shift to all poses: \n',np.round(endpoints_residuals_sMPA,3),'\n')
+    endpoints_residuals = endpoints_nominal - endpoints_best_fit
+    print('Residuals (in sMPA frame) after incorporating the best-fit (x,y,z,Rx,Ry) shift to all poses: \n',np.round(endpoints_residuals,3),'\n')
 
-    return df_after_fitting_FDPR_shifts,endpoints_residuals_sMPA,best_fit_deltas
+    return df_after_fitting_FDPR_shifts,endpoints_residuals,best_fit_deltas
 
 def optimize_5DOF_rotation_for_PAT(current_AC_AZ, current_AC_EL, desired_AC_AZ, desired_AC_EL, current_GSARX, current_GSARY,print_details=False):
     transformation_matrix_az_el = np.array([[0.824126, -0.56641],
