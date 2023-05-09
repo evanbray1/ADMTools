@@ -444,7 +444,7 @@ def translate_rotate_poses(df,rot,t):
     return dfnew
 
 
-def modify_poses(dp, df,focal_length,GSA_angle_WCS_deg,pose_select=None):
+def modify_poses_5DOF(dp, df,focal_length,GSA_angle_WCS_deg,pose_select=None):
     newdf = pd.DataFrame(columns=df.columns)
     if pose_select is not None:
         poses_to_modify = [val for val in df.index if pose_select in val]
@@ -455,19 +455,49 @@ def modify_poses(dp, df,focal_length,GSA_angle_WCS_deg,pose_select=None):
         update_uvec(newdf,pose,focal_length,GSA_angle_WCS_deg)
     return newdf
 
+def modify_poses_6DOF(delta_poses, df,focal_length,GSA_angle_WCS_deg,pose_select=None):
+    newdf = pd.DataFrame(columns=df.columns)
+    if pose_select is not None:
+        poses_to_modify = [val for val in df.index if pose_select in val]
+    else:
+        poses_to_modify = [val for val in df.index if ('PR' in val) or ('PD' in val)]
+    for pose in poses_to_modify:
+        #Apply the 5DOF tweak and recalculate uvecs
+        # print(df.loc[pose,['uvec_X','uvec_Y','uvec_Z']])
+        newdf.loc[pose,['X','Y','Z','Rx','Ry']] = df.loc[pose,['X','Y','Z','Rx','Ry']].astype(float) + np.array(delta_poses[0:-1])
+        update_uvec(newdf,pose,focal_length,GSA_angle_WCS_deg)
+        # print(newdf.loc[pose,['uvec_X','uvec_Y','uvec_Z']])
+
+        #Rotate the uvecs about Z
+        newdf.loc[pose,['uvec_X','uvec_Y','uvec_Z']] = rotate_pose_about_Rz(newdf.loc[pose,['uvec_X','uvec_Y','uvec_Z']],delta_poses[-1])
+        # print(newdf.loc[pose,['uvec_X','uvec_Y','uvec_Z']])
+
+        #Recalculate Rx/Ry based on updated uvecs
+        update_RxRy(newdf,pose,GSA_angle_WCS_deg)
+
+    return newdf
+
+def rotate_pose_about_Rz(pose_vector,Rz):
+    rot_Rz = R.from_euler('Z',Rz,degrees=True)
+    new_vector = rot_Rz.apply(np.array(pose_vector).astype(float))
+    return new_vector
+
 #This function is to be used exclusively with the curve_fit.
 #There are better ways to calculate endpoints if you're doing it "by hand".
 #Recall that all curve_fit inputs/outputs must be 1D arrays, NOT DataFrames.
 def generate_endpoints_for_fitting(df,dx,dy,dz,drx,dry,focal_length,GSA_angle_WCS_deg,translation_to_sMPA,
                                    rotation_from_sMPA_to_5DOF,pose_select='PR'):
-    df_temp = modify_poses([dx,dy,dz,drx,dry],df,focal_length,GSA_angle_WCS_deg)
-    #for pose in [val for val in df.index if pose_select in val]:
-    #    update_uvec(df_temp,pose,focal_length,GSA_angle_WCS_deg)
-
+    df_temp = modify_poses_5DOF([dx,dy,dz,drx,dry],df,focal_length,GSA_angle_WCS_deg)
     endpoints_temp_5DOF = compute_endpoints(df_temp)    #With the current shifts, calculate the endpoints in the 5DOF frame
-    #endpoints_temp_sMPA = convert_endpoints_to_sMPA_frame(endpoints_temp_5DOF, translation_to_sMPA, rotation_from_sMPA_to_5DOF) #Convert those endpoints to the sMPA frame
 
     return endpoints_temp_5DOF.values.ravel() #We have to flatten the array so that curve_fit doesn't throw a fit. We'll reshape it later.
+
+def generate_endpoints_for_fitting_6DOF(df,dx,dy,dz,drx,dry,drz,focal_length,GSA_angle_WCS_deg,translation_to_sMPA,
+                                   rotation_from_sMPA_to_5DOF,pose_select='PR'):
+    df_temp = modify_poses_6DOF([dx,dy,dz,drx,dry,drz],df,focal_length,GSA_angle_WCS_deg)
+    endpoints_temp_6DOF = compute_endpoints(df_temp)    #With the current shifts, calculate the endpoints in the 5DOF frame
+
+    return endpoints_temp_6DOF.values.ravel() #We have to flatten the array so that curve_fit doesn't throw a fit. We'll reshape it later.
 
 def convert_endpoints_to_sMPA_frame(df_endpoints_5DOF,translation_to_sMPA,rotation_from_sMPA_to_5DOF,pose_select='PR'):
     df_endpoints_sMPA = df_endpoints_5DOF.copy()
@@ -517,7 +547,54 @@ def pose_update_with_FDPR_results(df,shifts_from_FDPR,focal_length,GSA_angle_WCS
     print('Best-fit (X,Y,Z,Rx,Ry) deltas to apply to real-space poses: \n',np.round(best_fit_deltas,4),'\n')
 
     #Update the poses in the 5DOF frame
-    df_after_fitting_FDPR_shifts = modify_poses(best_fit_deltas,df,focal_length,GSA_angle_WCS_deg)
+    df_after_fitting_FDPR_shifts = modify_poses_5DOF(best_fit_deltas,df,focal_length,GSA_angle_WCS_deg)
+    #poses_to_display = [val for val in df.index if ('PR' in val) or ('PD' in val)]
+    #print('Old poses (in real space): \n',df.loc[poses_to_display,['X','Y','Z','Rx','Ry']],'\n')
+    #print('New poses (in real space): \n',df_after_fitting_FDPR_shifts.loc[poses_to_display,['X','Y','Z','Rx','Ry']],'\n')
+
+    #Calculate the endpoints of this new best-fit set of poses within the sMPA frame
+    endpoints_best_fit = compute_endpoints(df_after_fitting_FDPR_shifts)
+    #print('Best-fit endpoints (sMPA frame): \n',endpoints_sMPA_best_fit,'\n')
+
+    #Calculate residuals between nominal and best-fit
+    endpoints_residuals = endpoints_nominal - endpoints_best_fit
+    print('Residuals (in sMPA frame) after incorporating the best-fit (x,y,z,Rx,Ry) shift to all poses: \n',np.round(endpoints_residuals,3),'\n')
+
+    return df_after_fitting_FDPR_shifts,endpoints_residuals,best_fit_deltas
+
+def pose_update_with_FDPR_results_v2(df,shifts_from_FDPR,focal_length,GSA_angle_WCS_deg,translation_to_sMPA,rotation_from_sMPA_to_5DOF):
+    endpoints_5DOF = compute_endpoints(df)
+    #endpoints_sMPA = convert_endpoints_to_sMPA_frame(endpoints_5DOF,translation_to_sMPA,rotation_from_sMPA_to_5DOF)
+
+    #Update the endpoints based on information from the FDPR team
+    endpoints_nominal = compute_endpoints_with_FDPR_shifts(df, shifts_from_FDPR)
+    #endpoints_nominal = endpoints_5DOF.copy()
+    #for pose in [pose for pose in endpoints_nominal.index if 'PR' in pose]:
+    #    endpoints_nominal.loc[pose] = create_error_vector_v2(endpoints_nominal.loc[pose],shifts_from_FDPR)
+        
+        #endpoints_sMPA_nominal.loc[pose] -= shifts_from_FDPR.loc[pose,['dx (um)','dy (um)','chief ray dz (um)']].values/1000
+    #print('FDPR-adjusted nominal endpoint locations (sMPA frame): \n',endpoints_sMPA_nominal,'\n')
+
+    #Initial guesses/bounds for translations and rotations in millimeters and degrees
+    initial_guesses = [0.,0.,0.,0.,0.,0.]
+    bounds = ((-10,-10,-10,-1,-1,-5),
+              (10,10,10,1,1,5))
+
+    endpoints_residuals_baseline = endpoints_nominal - endpoints_5DOF
+    print('Residuals (in sMPA frame) baseline: \n',endpoints_residuals_baseline,'\n')
+
+    #Important caveat here, curve_fit only handles 1D arrays.
+    #So we have to strip our dataframe down to a 2D array and then flatten it, and reshape it later.
+    best_fit_deltas, best_fit_errors = curve_fit(partial(generate_endpoints_for_fitting_6DOF,focal_length=focal_length,
+                                                GSA_angle_WCS_deg=GSA_angle_WCS_deg,
+                                                translation_to_sMPA=translation_to_sMPA,
+                                                rotation_from_sMPA_to_5DOF=rotation_from_sMPA_to_5DOF),
+                                                df,endpoints_nominal.values.ravel(),p0=initial_guesses,bounds=bounds)
+
+    print('Best-fit (X,Y,Z,Rx,Ry) deltas to apply to real-space poses: \n',np.round(best_fit_deltas,4),'\n')
+
+    #Update the poses in the 5DOF frame
+    df_after_fitting_FDPR_shifts = modify_poses_6DOF(best_fit_deltas,df,focal_length,GSA_angle_WCS_deg)
     #poses_to_display = [val for val in df.index if ('PR' in val) or ('PD' in val)]
     #print('Old poses (in real space): \n',df.loc[poses_to_display,['X','Y','Z','Rx','Ry']],'\n')
     #print('New poses (in real space): \n',df_after_fitting_FDPR_shifts.loc[poses_to_display,['X','Y','Z','Rx','Ry']],'\n')
