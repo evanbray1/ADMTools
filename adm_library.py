@@ -581,7 +581,7 @@ def pose_update_with_FDPR_results_v2(df,shifts_from_FDPR,focal_length,GSA_angle_
               (10,10,10,1,1,5))
 
     endpoints_residuals_baseline = endpoints_nominal - endpoints_5DOF
-    print('Residuals (in sMPA frame) baseline: \n',endpoints_residuals_baseline,'\n')
+    print('Residuals baseline: \n',endpoints_residuals_baseline,'\n')
 
     #Important caveat here, curve_fit only handles 1D arrays.
     #So we have to strip our dataframe down to a 2D array and then flatten it, and reshape it later.
@@ -591,7 +591,7 @@ def pose_update_with_FDPR_results_v2(df,shifts_from_FDPR,focal_length,GSA_angle_
                                                 rotation_from_sMPA_to_5DOF=rotation_from_sMPA_to_5DOF),
                                                 df,endpoints_nominal.values.ravel(),p0=initial_guesses,bounds=bounds)
 
-    print('Best-fit (X,Y,Z,Rx,Ry) deltas to apply to real-space poses: \n',np.round(best_fit_deltas,4),'\n')
+    print('Best-fit 6DoF deltas to apply to real-space poses: \n',np.round(best_fit_deltas,4),'\n')
 
     #Update the poses in the 5DOF frame
     df_after_fitting_FDPR_shifts = modify_poses_6DOF(best_fit_deltas,df,focal_length,GSA_angle_WCS_deg)
@@ -605,7 +605,7 @@ def pose_update_with_FDPR_results_v2(df,shifts_from_FDPR,focal_length,GSA_angle_
 
     #Calculate residuals between nominal and best-fit
     endpoints_residuals = endpoints_nominal - endpoints_best_fit
-    print('Residuals (in sMPA frame) after incorporating the best-fit (x,y,z,Rx,Ry) shift to all poses: \n',np.round(endpoints_residuals,3),'\n')
+    print('Residuals after incorporating the best-fit 6DoF shift to all poses: \n',np.round(endpoints_residuals,3),'\n')
 
     return df_after_fitting_FDPR_shifts,endpoints_residuals,best_fit_deltas
 
