@@ -341,23 +341,25 @@ def check_pupil_crossing(dflist):
 #Read in the relevant data from Manal's encoder transformation spreadsheet. You'll need to update the filepath below to your personal machine.
 def read_encoder_coeffs_from_file():
     # encoder_converter_filepath = 'New Encoder Decoder 03042023.xlsx'
-    encoder_converter_filepath = 'files/New Encoder Decoder 03042023.xlsx'
-    spreadsheet = pd.read_excel(encoder_converter_filepath,sheet_name='Encoder Mapping Mar 4',skiprows=3,usecols='H:M')
+    encoder_converter_filepath = 'files/Encoder Mapping.xlsx'
+    spreadsheet = pd.read_excel(encoder_converter_filepath,sheet_name='Encoder Mapping 5-18-2023',skiprows=3,usecols='H:M')
 
-    coeffs_encoder_to_5DOF = spreadsheet.loc[0:10]
+    coeffs_encoder_to_5DOF = spreadsheet.loc[0:20]
     coeffs_encoder_to_5DOF = coeffs_encoder_to_5DOF.set_index('Encoder Coefficient')
-    coeffs_5DOF_to_encoder = spreadsheet.loc[17:27]
+    coeffs_5DOF_to_encoder = spreadsheet.loc[27:47]
     coeffs_5DOF_to_encoder = coeffs_5DOF_to_encoder.set_index('Encoder Coefficient')
     return [coeffs_encoder_to_5DOF,coeffs_5DOF_to_encoder]
 
 def calculate_5DOF_from_encoders(current_encoder_values):
-    #Generate a dataframe of component terms. For example, X,Y,Rx,Rx^2, etc...
-    terms = [current_encoder_values['X'],current_encoder_values['Y'],current_encoder_values['Z'],1,current_encoder_values['Rx'],    #Manually create the array of component terms, identical to the spreadsheet
-             current_encoder_values['Ry'],1,current_encoder_values['Rx']**2,current_encoder_values['Ry']**2,
-             current_encoder_values['Rx']**3,current_encoder_values['Ry']**3]
+    terms = [current_encoder_values['X'],current_encoder_values['Y'],current_encoder_values['Z'],1,\
+             current_encoder_values['X']**2,current_encoder_values['Y']**2,current_encoder_values['Z']**2,\
+             current_encoder_values['X']**3,current_encoder_values['Y']**3,current_encoder_values['Z']**3,\
+             current_encoder_values['X']*current_encoder_values['Y'],current_encoder_values['Z']*current_encoder_values['Y'],current_encoder_values['X']*current_encoder_values['Z'],\
+             current_encoder_values['Rx'],current_encoder_values['Ry'],1,\
+             current_encoder_values['Rx']**2,current_encoder_values['Ry']**2,\
+             current_encoder_values['Rx']**3,current_encoder_values['Ry']**3,current_encoder_values['Rx']*current_encoder_values['Ry']]
     terms = [float(i) for i in terms]                               #Convert to a list of floats instead of a list of Series
     coeffs_encoder_to_5DOF = read_encoder_coeffs_from_file()[0]     #Read the transformation coefficient values from the excel file
-
     #Create an empty dataframe. Calculate the 5DOF position one component at a time by multiplying the "term" array with each column of the coefficient array.
     calculated_5DOF_values = pd.DataFrame([np.repeat(np.nan,5)],columns=coeffs_encoder_to_5DOF.columns,index=[current_encoder_values.index[0]])
     for column in coeffs_encoder_to_5DOF.columns:
@@ -366,10 +368,13 @@ def calculate_5DOF_from_encoders(current_encoder_values):
     return calculated_5DOF_values
 
 def calculate_encoders_from_5DOF(current_5DOF_values):
-    #Generate a dataframe of component terms. For example, X,Y,Rx,Rx^2, etc...
-    terms = [current_5DOF_values['X'],current_5DOF_values['Y'],current_5DOF_values['Z'],1,current_5DOF_values['Rx'],    #Manually create the array of component terms, identical to the spreadsheet
-             current_5DOF_values['Ry'],1,current_5DOF_values['Rx']**2,current_5DOF_values['Ry']**2,
-             current_5DOF_values['Rx']**3,current_5DOF_values['Ry']**3]
+    terms = [current_5DOF_values['X'],current_5DOF_values['Y'],current_5DOF_values['Z'],1,\
+             current_5DOF_values['X']**2,current_5DOF_values['Y']**2,current_5DOF_values['Z']**2,\
+             current_5DOF_values['X']**3,current_5DOF_values['Y']**3,current_5DOF_values['Z']**3,\
+             current_5DOF_values['X']*current_5DOF_values['Y'],current_5DOF_values['Z']*current_5DOF_values['Y'],current_5DOF_values['X']*current_5DOF_values['Z'],\
+             current_5DOF_values['Rx'],current_5DOF_values['Ry'],1,\
+             current_5DOF_values['Rx']**2,current_5DOF_values['Ry']**2,\
+             current_5DOF_values['Rx']**3,current_5DOF_values['Ry']**3,current_5DOF_values['Rx']*current_5DOF_values['Ry']]
     terms = [float(i) for i in terms]                               #Convert to a list of floats instead of a list of Series
     coeffs_encoder_to_5DOF = read_encoder_coeffs_from_file()[1]     #Read the transformation coefficient values from the excel file
 
