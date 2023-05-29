@@ -699,10 +699,13 @@ def get_data_from_ADM_log(plateau,z_type,index_name,pat_target,filepath = 'files
         print(df_parsed_from_ADMLog.squeeze())
     return df_parsed_from_ADMLog
 
-def write_new_poses_to_Excel(filename,new_pose_name,columns,GSA_angle_WCS_deg,df,df_encoders,
+def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepath,
+                             columns,GSA_angle_WCS_deg,df,df_encoders,
                              df_update,df_update_encoders,focal_length,
+                             baseline_ADM_plateau_name=None,update_ADM_plateau_name=None,
                              p_null_PAT_baseline_encoder_original=None,
-                             p_null_PAT_update_encoder_original=None):
+                             p_null_PAT_update_encoder_original=None,
+                             rigid_body_correction=None):
     
     charstr='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     chars=list(charstr)
@@ -724,9 +727,10 @@ def write_new_poses_to_Excel(filename,new_pose_name,columns,GSA_angle_WCS_deg,df
         df_encoders.to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol+12)   
         sheet = writer.sheets[sheet1_name]
         sheet[f'{chars[startcol+12]}{startrow}']='Encoders'
+        sheet[f'{chars[startcol+13]}{startrow}']='from '+baseline_filepath
         sheet[f'{chars[startcol]}{startrow}']='True positions'
         sheet['B1'] = new_pose_name
-        sheet['B2'] = '(temporary string)'
+        sheet['B2'] = ''
         sheet['A27'] = 'Corresponding field points in GSA'
         sheet['A3'] = 'Track length'
         sheet['B3'] = focal_length+110
@@ -746,6 +750,7 @@ def write_new_poses_to_Excel(filename,new_pose_name,columns,GSA_angle_WCS_deg,df
 
         if p_null_PAT_baseline_encoder_original is not None:
             sheet['B41'] = 'ADM measurements'
+            sheet['D41'] = 'from "'+baseline_ADM_plateau_name+'"'
             p_null_PAT_baseline_encoder_original.to_excel(writer, sheet_name=sheet1_name,startrow=43,startcol=1)
 
         #Writing updated pose info to the 2nd tab
@@ -755,7 +760,7 @@ def write_new_poses_to_Excel(filename,new_pose_name,columns,GSA_angle_WCS_deg,df
         sheet[f'{chars[startcol+12]}{startrow}']='Encoders'
         sheet[f'{chars[startcol]}{startrow}']='True positions'
         sheet['B1'] = new_pose_name
-        sheet['B2'] = '(Temporary string)'
+        sheet['B2'] = ''
         sheet['A27'] = 'Corresponding field points in GSA'
         sheet['A3'] = 'Track length'
         sheet['B3'] = focal_length+110
@@ -775,7 +780,14 @@ def write_new_poses_to_Excel(filename,new_pose_name,columns,GSA_angle_WCS_deg,df
 
         if p_null_PAT_update_encoder_original is not None:
             sheet['B41'] = 'ADM measurements'
+            sheet['D41'] = 'from "'+update_ADM_plateau_name+'"'
             p_null_PAT_update_encoder_original.to_excel(writer, sheet_name=sheet2_name,startrow=43,startcol=1)
+            
+        if update_type == 'FDPR' and rigid_body_correction is not None:
+            newdf = pd.DataFrame(columns=['X','Y','Z','Rx','Ry','Rz'],index=['rigid body transform'])
+            newdf.loc['rigid body transform'] = rigid_body_correction
+            newdf.to_excel(writer,sheet_name=sheet2_name,startrow=11,startcol=13)
+            sheet['N11'] = 'Best-fit rigid body transform:'
             
         print('**Writing to Excel complete**')
 
