@@ -651,44 +651,48 @@ def convert_df_to_encoder_space(df,pose_select=None):
         df_encoder_space = pd.concat([df_encoder_space,calculate_encoders_from_5DOF(pd.DataFrame(df.loc[pose]).T)])
     return df_encoder_space
 
-def optimize_p_null_PATB_encoders(df_PATB_encoders,p_null_offset):
-    optimal_gsarx_patb, optimal_gsary_patb = optimize_5DOF_rotation_for_PAT(df_PATB_encoders['PATB AC AZ'].values[0], df_PATB_encoders['PATB AC EL'].values[0], 
-                                         df_PATB_encoders['sMATF AC AZ'].values[0],df_PATB_encoders['sMATF AC EL'].values[0], 
-                                         df_PATB_encoders['Rx'].values[0], df_PATB_encoders['Ry'].values[0],print_details=True)
+def optimize_p_null_PAT_encoders(df_PAT_encoders,p_null_offset):
+    optimal_gsarx_PAT, optimal_gsary_PAT = optimize_5DOF_rotation_for_PAT(df_PAT_encoders['PAT AC AZ'].values[0], df_PAT_encoders['PAT AC EL'].values[0], 
+                                         df_PAT_encoders['sMATF AC AZ'].values[0],df_PAT_encoders['sMATF AC EL'].values[0], 
+                                         df_PAT_encoders['Rx'].values[0], df_PAT_encoders['Ry'].values[0],print_details=True)
 
-    optimal_htsax_patb, optimal_vtsa_patb = optimize_5DOF_translation_for_PAT(df_PATB_encoders['PATB Pri LED X'].values[0], df_PATB_encoders['PATB Pri LED Y'].values[0], 
-                                             df_PATB_encoders['sMATF Pri LED X'].values[0],df_PATB_encoders['sMATF Pri LED Y'].values[0], 
-                                             df_PATB_encoders['X'].values[0], df_PATB_encoders['Y'].values[0],print_details=True)
+    optimal_htsax_PAT, optimal_vtsa_PAT = optimize_5DOF_translation_for_PAT(df_PAT_encoders['PAT Pri LED X'].values[0], df_PAT_encoders['PAT Pri LED Y'].values[0], 
+                                             df_PAT_encoders['sMATF Pri LED X'].values[0],df_PAT_encoders['sMATF Pri LED Y'].values[0], 
+                                             df_PAT_encoders['X'].values[0], df_PAT_encoders['Y'].values[0],print_details=True)
     
-    additional_patb_z_shift = -1*p_null_offset[1]*np.sin(np.deg2rad(optimal_gsarx_patb - df_PATB_encoders['Rx'].values[0])) +\
-                                p_null_offset[0]*np.sin(np.deg2rad(optimal_gsary_patb - df_PATB_encoders['Ry'].values[0]))
-    #print('Effective change in Z-position of PATB after applying optimal rotations: ',round(additional_patb_z_shift,4))
+    additional_PAT_z_shift = -1*p_null_offset[1]*np.sin(np.deg2rad(optimal_gsarx_PAT - df_PAT_encoders['Rx'].values[0])) +\
+                                p_null_offset[0]*np.sin(np.deg2rad(optimal_gsary_PAT - df_PAT_encoders['Ry'].values[0]))
+    #print('Effective change in Z-position of PAT after applying optimal rotations: ',round(additional_PAT_z_shift,4))
     
     #Update the dataframe with the new, optimal values.
-    df_PATB_encoders['z_PATB'] += additional_patb_z_shift
-    df_PATB_encoders[['X','Y','Rx','Ry']] = [optimal_htsax_patb,optimal_vtsa_patb,optimal_gsarx_patb,optimal_gsary_patb]
-    df_PATB_encoders[['PATB AC AZ','PATB AC EL','PATB Pri LED X','PATB Pri LED Y']] = df_PATB_encoders[['sMATF AC AZ','sMATF AC EL','sMATF Pri LED X','sMATF Pri LED Y']]
-    df_PATB_encoders[['Optimized?']] = True
+    df_PAT_encoders['z_PAT'] += additional_PAT_z_shift
+    df_PAT_encoders[['X','Y','Rx','Ry']] = [optimal_htsax_PAT,optimal_vtsa_PAT,optimal_gsarx_PAT,optimal_gsary_PAT]
+    df_PAT_encoders[['PAT AC AZ','PAT AC EL','PAT Pri LED X','PAT Pri LED Y']] = df_PAT_encoders[['sMATF AC AZ','sMATF AC EL','sMATF Pri LED X','sMATF Pri LED Y']]
+    df_PAT_encoders[['Optimized?']] = True
     
-    return df_PATB_encoders
+    return df_PAT_encoders
 
-def get_data_from_ADM_log(plateau,z_type,index_name,filepath = 'files/ADM Ops Log.xlsx',print_details=False):
+def get_data_from_ADM_log(plateau,z_type,index_name,pat_target,filepath = 'files/ADM Ops Log.xlsx',print_details=False):
     spreadsheet = pd.read_excel(filepath,sheet_name='Position Log - Ball',skiprows=0,usecols='A:Z',index_col=5)
     spreadsheet = spreadsheet[(spreadsheet['Plateau'] == plateau) & (spreadsheet['Final?'] == 'Y')]
 
-    df_parsed_from_ADMLog = pd.DataFrame(dict({'X':spreadsheet.loc['PATB LED pri']['5DOF X'], 'Y':spreadsheet.loc['PATB LED pri']['5DOF Y'],'Z':spreadsheet.loc['PATB LED pri']['5DOF Z'],
-                                                  'Rx':spreadsheet.loc['PATB LED pri']['5DOF Rx'],'Ry':spreadsheet.loc['PATB LED pri']['5DOF Ry'],
+    if z_type == 'retro':
+        z_type_temp = 'retro pri'
+    elif z_type == 'mirror':
+        z_type_temp = 'mirror'
+    df_parsed_from_ADMLog = pd.DataFrame(dict({'X':spreadsheet.loc['PAT'+pat_target+' LED pri']['5DOF X'], 'Y':spreadsheet.loc['PAT'+pat_target+' LED pri']['5DOF Y'],'Z':spreadsheet.loc['PAT'+pat_target+' LED pri']['5DOF Z'],
+                                                  'Rx':spreadsheet.loc['PAT'+pat_target+' LED pri']['5DOF Rx'],'Ry':spreadsheet.loc['PAT'+pat_target+' LED pri']['5DOF Ry'],
                                                   'z_sMATF':spreadsheet.loc['sMATF '+z_type]['Range (m)']*1000.,
-                                                  'z_PATB':spreadsheet.loc['PATB '+z_type+' pri']['Range (m)']*1000.,
+                                                  'z_PAT':spreadsheet.loc['PAT'+pat_target+' '+z_type_temp]['Range (m)']*1000.,
                                                   'z_type':z_type,
                                                   'sMATF AC AZ':spreadsheet.loc['sMATF mirror']['AC AZ (deg)'],
                                                   'sMATF AC EL':spreadsheet.loc['sMATF mirror']['AC EL (deg)'],
-                                                  'PATB AC AZ':spreadsheet.loc['PATB mirror']['AC AZ (deg)'],
-                                                  'PATB AC EL':spreadsheet.loc['PATB mirror']['AC EL (deg)'],
+                                                  'PAT AC AZ':spreadsheet.loc['PAT'+pat_target+' mirror']['AC AZ (deg)'],
+                                                  'PAT AC EL':spreadsheet.loc['PAT'+pat_target+' mirror']['AC EL (deg)'],
                                                   'sMATF Pri LED X':spreadsheet.loc['sMATF LED pri']['X centr (pix)'],
                                                   'sMATF Pri LED Y':spreadsheet.loc['sMATF LED pri']['Y centr (pix)'],
-                                                  'PATB Pri LED X':spreadsheet.loc['PATB LED pri']['X centr (pix)'],
-                                                  'PATB Pri LED Y':spreadsheet.loc['PATB LED pri']['Y centr (pix)'],
+                                                  'PAT Pri LED X':spreadsheet.loc['PAT'+pat_target+' LED pri']['X centr (pix)'],
+                                                  'PAT Pri LED Y':spreadsheet.loc['PAT'+pat_target+' LED pri']['Y centr (pix)'],
                                                   'date':spreadsheet.loc['sMATF mirror']['Date']
                                                  }),index=[index_name])
     if print_details == True:
@@ -697,8 +701,8 @@ def get_data_from_ADM_log(plateau,z_type,index_name,filepath = 'files/ADM Ops Lo
 
 def write_new_poses_to_Excel(filename,new_pose_name,columns,GSA_angle_WCS_deg,df,df_encoders,
                              df_update,df_update_encoders,focal_length,
-                             p_null_PATB_baseline_encoder_original=None,
-                             p_null_PATB_update_encoder_original=None):
+                             p_null_PAT_baseline_encoder_original=None,
+                             p_null_PAT_update_encoder_original=None):
     
     charstr='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     chars=list(charstr)
@@ -740,9 +744,9 @@ def write_new_poses_to_Excel(filename,new_pose_name,columns,GSA_angle_WCS_deg,df
         gsa_coordinates.index = index_names
         gsa_coordinates.to_excel(writer,sheet_name=sheet1_name,startrow=27,startcol=1)
 
-        if p_null_PATB_baseline_encoder_original is not None:
+        if p_null_PAT_baseline_encoder_original is not None:
             sheet['B41'] = 'ADM measurements'
-            p_null_PATB_baseline_encoder_original.to_excel(writer, sheet_name=sheet1_name,startrow=43,startcol=1)
+            p_null_PAT_baseline_encoder_original.to_excel(writer, sheet_name=sheet1_name,startrow=43,startcol=1)
 
         #Writing updated pose info to the 2nd tab
         df_update.loc[index_names].to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol)
@@ -769,9 +773,9 @@ def write_new_poses_to_Excel(filename,new_pose_name,columns,GSA_angle_WCS_deg,df
         gsa_coordinates.index = index_names
         gsa_coordinates.to_excel(writer,sheet_name=sheet2_name,startrow=27,startcol=1)
 
-        if p_null_PATB_update_encoder_original is not None:
+        if p_null_PAT_update_encoder_original is not None:
             sheet['B41'] = 'ADM measurements'
-            p_null_PATB_update_encoder_original.to_excel(writer, sheet_name=sheet2_name,startrow=43,startcol=1)
+            p_null_PAT_update_encoder_original.to_excel(writer, sheet_name=sheet2_name,startrow=43,startcol=1)
             
         print('**Writing to Excel complete**')
 
