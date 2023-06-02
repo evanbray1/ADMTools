@@ -789,5 +789,6 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
             newdf.to_excel(writer,sheet_name=sheet2_name,startrow=11,startcol=13)
             sheet['N11'] = 'Best-fit rigid body transform:'
             
-        print('**Writing to Excel complete**')
+        print('**Writing to Excel complete.**')
+        print('**Filename: ',filename)
 
