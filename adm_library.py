@@ -711,7 +711,7 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
     chars=list(charstr)
     #nums=[str(i) for i in range(1,26)]
 
-    startrow = 16
+    startrow = 15
     startcol = 1
     index_names = [val for val in df.index if 'PDI' in val or 'PR' in val]
 
@@ -728,9 +728,10 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
         sheet = writer.sheets[sheet1_name]
         sheet[f'{chars[startcol+12]}{startrow}']='Encoders'
         sheet[f'{chars[startcol+13]}{startrow}']='from '+baseline_filepath
-        sheet[f'{chars[startcol]}{startrow}']='True positions'
+        sheet[f'{chars[startcol]}{startrow}']='Position in 5DOF space'
         sheet['B1'] = new_pose_name
-        sheet['B2'] = ''
+        sheet[f'{chars[startcol]}{startrow+1}'] = 'Name'
+        sheet[f'{chars[startcol+12]}{startrow+1}'] = 'Name'
         sheet['A27'] = 'Corresponding field points in GSA'
         sheet['A3'] = 'Track length'
         sheet['B3'] = focal_length+110
@@ -753,14 +754,15 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
             sheet['D41'] = 'from "'+baseline_ADM_plateau_name+'"'
             p_null_PAT_baseline_encoder_original.to_excel(writer, sheet_name=sheet1_name,startrow=43,startcol=1)
 
-        #Writing updated pose info to the 2nd tab
+        #Writing updated pose info to the 2nd tab      
         df_update.loc[index_names].to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol)
         df_update_encoders.to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol+12)   
         sheet = writer.sheets[sheet2_name]
         sheet[f'{chars[startcol+12]}{startrow}']='Encoders'
-        sheet[f'{chars[startcol]}{startrow}']='True positions'
+        sheet[f'{chars[startcol]}{startrow}']='Position in 5DOF space'
         sheet['B1'] = new_pose_name
-        sheet['B2'] = ''
+        sheet[f'{chars[startcol]}{startrow+1}'] = 'Name'
+        sheet[f'{chars[startcol+12]}{startrow+1}'] = 'Name'
         sheet['A27'] = 'Corresponding field points in GSA'
         sheet['A3'] = 'Track length'
         sheet['B3'] = focal_length+110
@@ -788,7 +790,7 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
             newdf.loc['rigid body transform'] = rigid_body_correction
             newdf.to_excel(writer,sheet_name=sheet2_name,startrow=11,startcol=13)
             sheet['N11'] = 'Best-fit rigid body transform:'
-            
+        
         print('**Writing to Excel complete.**')
         print('**Filename: ',filename)
 
