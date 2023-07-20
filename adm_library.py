@@ -539,6 +539,7 @@ def pose_update_with_FDPR_results(df,shifts_from_FDPR,focal_length,GSA_angle_WCS
               (10,10,10,1,1))
 
     endpoints_residuals_baseline = endpoints_nominal - endpoints_5DOF
+    
     print('Residuals (in sMPA frame) baseline: \n',endpoints_residuals_baseline,'\n')
 
     #Important caveat here, curve_fit only handles 1D arrays.
@@ -700,7 +701,7 @@ def get_data_from_ADM_log(plateau,z_type,index_name,pat_target,filepath = 'files
     return df_parsed_from_ADMLog
 
 def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepath,
-                             columns,GSA_angle_WCS_deg,df,df_encoders,
+                             columns,sMPA_angle_to_WCS_deg,GSA_angle_WCS_deg,df,df_encoders,
                              df_update,df_update_encoders,focal_length,
                              baseline_ADM_plateau_name=None,update_ADM_plateau_name=None,
                              p_null_PAT_baseline_encoder_original=None,
@@ -738,6 +739,9 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
     #     sheet['A6'] = 'sMPA offset to WCS'
         newdf = df[df.index=='sMPA'][['X','Y','Z','uvec_X','uvec_Y','uvec_Z']]
         newdf.to_excel(writer,sheet_name=sheet1_name,startrow=4,startcol=0)
+        # newdf = sMPA_angle_to_WCS_deg.to_frame().transpose()
+        # newdf.columns = ['Rx','Ry','Rz']
+        # newdf.to_excel(writer,sheet_name=sheet1_name,startrow=7,startcol=0)
         sheet['A10'] = 'GSA angle to WCS'
         sheet['B10'] = GSA_angle_WCS_deg
         if 'sMask' in df.index:
@@ -769,6 +773,9 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
     #     sheet['A6'] = 'sMPA offset to WCS'
         newdf = df_update[df_update.index=='sMPA'][['X','Y','Z','uvec_X','uvec_Y','uvec_Z']]
         newdf.to_excel(writer,sheet_name=sheet2_name,startrow=4,startcol=0)
+        # newdf = sMPA_angle_to_WCS_deg.to_frame().transpose()
+        # newdf.columns = ['Rx','Ry','Rz']
+        # newdf.to_excel(writer,sheet_name=sheet2_name,startrow=7,startcol=0)
         sheet['A10'] = 'GSA angle to WCS'
         sheet['B10'] = GSA_angle_WCS_deg
         if 'sMask' in df_update.index:
