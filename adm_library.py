@@ -351,6 +351,7 @@ def read_encoder_coeffs_from_file():
     return [coeffs_encoder_to_5DOF,coeffs_5DOF_to_encoder]
 
 def calculate_5DOF_from_encoders(current_encoder_values):
+    # print(current_encoder_values.loc['X'])
     terms = [current_encoder_values['X'],current_encoder_values['Y'],current_encoder_values['Z'],1,\
              current_encoder_values['X']**2,current_encoder_values['Y']**2,current_encoder_values['Z']**2,\
              current_encoder_values['X']**3,current_encoder_values['Y']**3,current_encoder_values['Z']**3,\
@@ -566,7 +567,7 @@ def pose_update_with_FDPR_results(df,shifts_from_FDPR,focal_length,GSA_angle_WCS
     endpoints_residuals = endpoints_nominal - endpoints_best_fit
     print('Residuals (in sMPA frame) after incorporating the best-fit (x,y,z,Rx,Ry) shift to all poses: \n',np.round(endpoints_residuals,3),'\n')
 
-    return df_after_fitting_FDPR_shifts,endpoints_residuals,best_fit_deltas
+    return df_after_fitting_FDPR_shifts,endpoints_residuals,best_fit_deltas,best_fit_errors
 
 def pose_update_with_FDPR_results_v2(df,shifts_from_FDPR,focal_length,GSA_angle_WCS_deg,translation_to_sMPA,rotation_from_sMPA_to_5DOF):
     endpoints_5DOF = compute_endpoints(df)
@@ -613,7 +614,7 @@ def pose_update_with_FDPR_results_v2(df,shifts_from_FDPR,focal_length,GSA_angle_
     endpoints_residuals = endpoints_nominal - endpoints_best_fit
     print('Residuals after incorporating the best-fit 6DoF shift to all poses: \n',np.round(endpoints_residuals,3),'\n')
 
-    return df_after_fitting_FDPR_shifts,endpoints_residuals,best_fit_deltas
+    return df_after_fitting_FDPR_shifts,endpoints_residuals,best_fit_deltas,best_fit_errors
 
 def optimize_5DOF_rotation_for_PAT(current_AC_AZ, current_AC_EL, desired_AC_AZ, desired_AC_EL, current_GSARX, current_GSARY,print_details=False):
     transformation_matrix_az_el = np.array([[0.824126, -0.56641],
@@ -706,7 +707,7 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
                              baseline_ADM_plateau_name=None,update_ADM_plateau_name=None,
                              p_null_PAT_baseline_encoder_original=None,
                              p_null_PAT_update_encoder_original=None,
-                             rigid_body_correction=None):
+                             rigid_body_correction=None,best_fit_errors=None):
     
     charstr='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     chars=list(charstr)
@@ -795,8 +796,13 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
         if update_type == 'FDPR' and rigid_body_correction is not None:
             newdf = pd.DataFrame(columns=['X','Y','Z','Rx','Ry','Rz'],index=['rigid body transform'])
             newdf.loc['rigid body transform'] = rigid_body_correction
-            newdf.to_excel(writer,sheet_name=sheet2_name,startrow=11,startcol=13)
-            sheet['N11'] = 'Best-fit rigid body transform:'
+            newdf.to_excel(writer,sheet_name=sheet2_name,startrow=23,startcol=13)
+            sheet['N23'] = 'Best-fit rigid body transform:'
+            
+            newdf = pd.DataFrame(best_fit_errors,columns=['X','Y','Z','Rx','Ry','Rz'],index=['X','Y','Z','Rx','Ry','Rz'])
+            newdf.to_excel(writer,sheet_name=sheet2_name,startrow=27,startcol=13)
+            sheet['N27'] = 'Covariance matrix from fit:'
+
         
         print('**Writing to Excel complete.**')
         print('**Filename: ',filename)
