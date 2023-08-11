@@ -725,15 +725,15 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
     sheet1_name = 'baseline'
     sheet2_name = 'update'
     with pd.ExcelWriter(filename) as writer:  
-        df.loc[index_names].to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol)
-        df_encoders.to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol+12)   
+        df.loc[index_names,['X','Y','Z','Rx','Ry']].to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol)
+        df_encoders.to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol+7)   
         sheet = writer.sheets[sheet1_name]
-        sheet[f'{chars[startcol+12]}{startrow}']='Encoders'
-        sheet[f'{chars[startcol+13]}{startrow}']='from '+baseline_filepath
+        sheet[f'{chars[startcol+7]}{startrow}']='Encoders'
+        sheet[f'{chars[startcol+8]}{startrow}']='from '+baseline_filepath
         sheet[f'{chars[startcol]}{startrow}']='Position in 5DOF space'
         sheet['B1'] = new_pose_name
-        sheet[f'{chars[startcol]}{startrow+1}'] = 'Name'
-        sheet[f'{chars[startcol+12]}{startrow+1}'] = 'Name'
+        # sheet[f'{chars[startcol]}{startrow+1}'] = 'Name'
+        # sheet[f'{chars[startcol+12]}{startrow+1}'] = 'Name'
         sheet['A27'] = 'Corresponding field points in GSA'
         sheet['A3'] = 'Track length'
         sheet['B3'] = focal_length+110
@@ -760,10 +760,10 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
             p_null_PAT_baseline_encoder_original.to_excel(writer, sheet_name=sheet1_name,startrow=43,startcol=1)
 
         #Writing updated pose info to the 2nd tab      
-        df_update.loc[index_names].to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol)
-        df_update_encoders.to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol+12)   
+        df_update.loc[index_names,['X','Y','Z','Rx','Ry']].to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol)
+        df_update_encoders.to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol+7)   
         sheet = writer.sheets[sheet2_name]
-        sheet[f'{chars[startcol+12]}{startrow}']='Encoders'
+        sheet[f'{chars[startcol+7]}{startrow}']='Encoders'
         sheet[f'{chars[startcol]}{startrow}']='Position in 5DOF space'
         sheet['B1'] = new_pose_name
         sheet[f'{chars[startcol]}{startrow+1}'] = 'Name'
@@ -772,8 +772,8 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
         sheet['A3'] = 'Track length'
         sheet['B3'] = focal_length+110
     #     sheet['A6'] = 'sMPA offset to WCS'
-        newdf = df_update[df_update.index=='sMPA'][['X','Y','Z','uvec_X','uvec_Y','uvec_Z']]
-        newdf.to_excel(writer,sheet_name=sheet2_name,startrow=4,startcol=0)
+        # newdf = df_update[df_update.index=='sMPA'][['X','Y','Z','uvec_X','uvec_Y','uvec_Z']]
+        # newdf.to_excel(writer,sheet_name=sheet2_name,startrow=4,startcol=0)
         # newdf = sMPA_angle_to_WCS_deg.to_frame().transpose()
         # newdf.columns = ['Rx','Ry','Rz']
         # newdf.to_excel(writer,sheet_name=sheet2_name,startrow=7,startcol=0)
