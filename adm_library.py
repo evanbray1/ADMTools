@@ -244,9 +244,9 @@ def plot_local_PR(df, ax, camera):
     ax.plot_surface(X, Y, Z, rstride=1, cstride=1, alpha=0.2)
 
 
-def compute_endpoints(df,pose_select='PR'):
+def compute_endpoints(df,ignored_poses=[None],pose_select='PR'):
     newdf = pd.DataFrame()
-    for pose in [val for val in df.index if pose_select in val]:
+    for pose in [val for val in df.index if pose_select in val and val not in ignored_poses]:
         newdf.loc[pose,'endpt_X'] = df.loc[pose,'X']+df.loc[pose,'uvec_X']
         newdf.loc[pose,'endpt_Y'] = df.loc[pose,'Y']+df.loc[pose,'uvec_Y']
         newdf.loc[pose,'endpt_Z'] = df.loc[pose,'Z']+df.loc[pose,'uvec_Z']
@@ -266,10 +266,10 @@ def compute_endpoints_with_FDPR_shifts(df,shifts_from_FDPR,pose_select='PR'):
         endpoints_with_shift.loc[pose] = newvec2
     return endpoints_with_shift
 
-def compute_endpoint_errors(df,df1,pose_select='PR'):
+def compute_endpoint_errors(df,df1,pose_select='PR',ignored_poses=[None]):
     newdf = pd.DataFrame()
     newdf1 = pd.DataFrame()
-    for pose in [val for val in df.index if pose_select in val]:
+    for pose in [val for val in df.index if pose_select in val and val not in ignored_poses]:
         newdf.loc[pose,'endpt_X'] = df.loc[pose,'X']+df.loc[pose,'uvec_X']
         newdf.loc[pose,'endpt_Y'] = df.loc[pose,'Y']+df.loc[pose,'uvec_Y']
         newdf.loc[pose,'endpt_Z'] = df.loc[pose,'Z']+df.loc[pose,'uvec_Z']
@@ -294,9 +294,9 @@ def rotmat_from_2vec(a,b):
     vcross = skew_matrix(v)
     return np.eye(3)+vcross+np.dot(vcross,vcross)/(1.+c)
 
-def compute_endpoint_errors_sMPA_frame(df, df1, pose_select='PR'):
+def compute_endpoint_errors_sMPA_frame(df, df1, pose_select='PR',ignored_poses=[None]):
     # express endpoint errors between 2 dataframes in the coordinate system of the sMPA in the second dataframe
-    d = compute_endpoint_errors(df, df1)
+    d = compute_endpoint_errors(df, df1,pose_select=pose_select,ignored_poses=ignored_poses)
     #d = compute_endpoints(df1)      #I don't THINK this will suffice as a drop-in solution
     newdf = pd.DataFrame(columns=d.columns)
     rotmat = R.from_matrix(rotmat_from_2vec(np.array([0,0,1]),df1.loc['sMPA',['uvec_X','uvec_Y','uvec_Z']].values.astype(float)))
@@ -327,11 +327,11 @@ def compute_distance_to_PR_centers_Z(df,pose_select='PR'):
     return ret
 
 
-def check_pupil_crossing(dflist):
+def check_pupil_crossing(dflist,ignored_poses=[None]):
     # print('Pose | Distance | ')
     for d in dflist:
         dfnew = pd.DataFrame(columns=['sMask to chief ray (mm)','sMask to origin (mm)'])
-        for pose in d.index:
+        for pose in [val for val in d.index if val not in ignored_poses]:
             vec = np.array(d.loc['sMask',['X','Y','Z']]-d.loc[pose,['X','Y','Z']]).astype(float)
             uvec = np.array(d.loc[pose,['uvec_X','uvec_Y','uvec_Z']]).astype(float)
             dist = np.linalg.norm(np.cross(vec,uvec))/np.linalg.norm(uvec)
@@ -643,12 +643,12 @@ def convert_pose_encoders_to_pose_actual(pose_encoders):
     # print('NEWLY calculated 5DOF position in real space based on recorded 5DOF encoder values: \n',pose_actual)
     return pose_actual
 
-def convert_df_to_encoder_space(df,pose_select=None):
+def convert_df_to_encoder_space(df,pose_select=None,ignored_poses=[None]):
     df_encoder_space = pd.DataFrame(columns=['X', 'Y', 'Z', 'Rx', 'Ry'])
     if pose_select == None:
-        poses_to_convert = [val for val in df.index if 'PDI' in val or 'PR' in val]
+        poses_to_convert = [val for val in df.index if 'PDI' in val or 'PR' in val and val not in ignored_poses]
     else:
-        poses_to_convert = [val for val in df.index if pose_select in val]
+        poses_to_convert = [val for val in df.index if pose_select in val and val not in ignored_poses]
     for pose in poses_to_convert:
         df_encoder_space = pd.concat([df_encoder_space,calculate_encoders_from_5DOF(pd.DataFrame(df.loc[pose]).T)])
     return df_encoder_space
@@ -714,7 +714,7 @@ def get_data_from_ADM_log(plateau,z_type,index_name,pat_target,pat_led_type,matf
 
 def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepath,
                              columns,sMPA_angle_to_WCS_deg,GSA_angle_WCS_deg,df,df_encoders,
-                             df_update,df_update_encoders,focal_length,
+                             df_update,df_update_encoders,focal_length,num_poses,
                              baseline_ADM_plateau_name=None,update_ADM_plateau_name=None,
                              p_null_PAT_baseline_encoder_original=None,
                              p_null_PAT_update_encoder_original=None,
@@ -726,7 +726,8 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
 
     startrow = 15
     startcol = 1
-    index_names = [val for val in df.index if 'PDI' in val or 'PR' in val]
+    ignored_poses = ['sMask','PATB','sMPA','sMATF','PATB_update','sMATF_update']
+    index_names = [val for val in df.index if val not in ignored_poses]
 
     gsa_rot = R.from_euler('X',[GSA_angle_WCS_deg], degrees=True)
     # uvec = np.array([0.,0.,dz_update]+p_null_offset)
@@ -745,7 +746,7 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
         sheet['B1'] = new_pose_name
         # sheet[f'{chars[startcol]}{startrow+1}'] = 'Name'
         # sheet[f'{chars[startcol+12]}{startrow+1}'] = 'Name'
-        sheet['A27'] = 'Corresponding field points in GSA'
+        sheet['A'+str(startrow+num_poses+3)] = 'Corresponding field points in GSA'
         sheet['A3'] = 'Track length'
         sheet['B3'] = focal_length+110
     #     sheet['A6'] = 'sMPA offset to WCS'
@@ -760,15 +761,15 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
             newdf = df[df.index=='sMask'][['X','Y','Z']]
             newdf.loc['sMask',['X','Y','Z']] = gsa_rot.inv().apply(newdf.loc['sMask',['X','Y','Z']].values.astype(float))
             newdf.to_excel(writer,sheet_name=sheet1_name,startrow=11,startcol=1)
-        endpoints = compute_endpoints(df.loc[index_names],pose_select='P')
+        endpoints = compute_endpoints(df.loc[index_names],pose_select='')
         gsa_coordinates = pd.DataFrame(gsa_rot.inv().apply(endpoints),columns=['X','Y','Z'])
         gsa_coordinates.index = index_names
-        gsa_coordinates.to_excel(writer,sheet_name=sheet1_name,startrow=27,startcol=1)
+        gsa_coordinates.to_excel(writer,sheet_name=sheet1_name,startrow=startrow+num_poses+3,startcol=1)
 
         if p_null_PAT_baseline_encoder_original is not None:
-            sheet['B41'] = 'ADM measurements'
-            sheet['D41'] = 'from "'+baseline_ADM_plateau_name+'"'
-            p_null_PAT_baseline_encoder_original.to_excel(writer, sheet_name=sheet1_name,startrow=43,startcol=1)
+            sheet['B'+str(startrow+num_poses*2+6)] = 'ADM measurements'
+            sheet['D'+str(startrow+num_poses*2+6)] = 'from "'+baseline_ADM_plateau_name+'"'
+            p_null_PAT_baseline_encoder_original.to_excel(writer, sheet_name=sheet1_name,startrow=startrow+num_poses*2+6,startcol=1)
 
         #Writing updated pose info to the 2nd tab      
         df_update.loc[index_names,['X','Y','Z','Rx','Ry']].to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol)
@@ -779,7 +780,7 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
         sheet['B1'] = new_pose_name
         sheet[f'{chars[startcol]}{startrow+1}'] = 'Name'
         sheet[f'{chars[startcol+7]}{startrow+1}'] = 'Name'
-        sheet['A27'] = 'Corresponding field points in GSA'
+        sheet['A'+str(startrow+num_poses+3)] = 'Corresponding field points in GSA'
         sheet['A3'] = 'Track length'
         sheet['B3'] = focal_length+110
     #     sheet['A6'] = 'sMPA offset to WCS'
@@ -794,25 +795,25 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
             newdf = df_update[df_update.index=='sMask'][['X','Y','Z']]
             newdf.loc['sMask',['X','Y','Z']] = gsa_rot.inv().apply(newdf.loc['sMask',['X','Y','Z']].values.astype(float))
             newdf.to_excel(writer,sheet_name=sheet2_name,startrow=11,startcol=1)
-        endpoints = compute_endpoints(df_update.loc[index_names],pose_select='P')
+        endpoints = compute_endpoints(df_update.loc[index_names],pose_select='')
         gsa_coordinates = pd.DataFrame(gsa_rot.inv().apply(endpoints),columns=['X','Y','Z'])
         gsa_coordinates.index = index_names
-        gsa_coordinates.to_excel(writer,sheet_name=sheet2_name,startrow=27,startcol=1)
+        gsa_coordinates.to_excel(writer,sheet_name=sheet2_name,startrow=startrow+num_poses+3,startcol=1)
 
         if p_null_PAT_update_encoder_original is not None:
-            sheet['B41'] = 'ADM measurements'
-            sheet['D41'] = 'from "'+update_ADM_plateau_name+'"'
-            p_null_PAT_update_encoder_original.to_excel(writer, sheet_name=sheet2_name,startrow=43,startcol=1)
+            sheet['B'+str(startrow+num_poses*2+6)] = 'ADM measurements'
+            sheet['D'+str(startrow+num_poses*2+6)] = 'from "'+update_ADM_plateau_name+'"'
+            p_null_PAT_update_encoder_original.to_excel(writer, sheet_name=sheet2_name,startrow=startrow+num_poses*2+6,startcol=1)
             
         if update_type == 'FDPR' and rigid_body_correction is not None:
             newdf = pd.DataFrame(columns=['X','Y','Z','Rx','Ry','Rz'],index=['rigid body transform'])
             newdf.loc['rigid body transform'] = rigid_body_correction
-            newdf.to_excel(writer,sheet_name=sheet2_name,startrow=23,startcol=13)
-            sheet['N23'] = 'Best-fit rigid body transform:'
+            newdf.to_excel(writer,sheet_name=sheet2_name,startrow=startrow,startcol=13)
+            sheet['I'+str(startrow+num_poses+3)] = 'Best-fit rigid body transform:'
             
             newdf = pd.DataFrame(best_fit_errors,columns=['X','Y','Z','Rx','Ry','Rz'],index=['X','Y','Z','Rx','Ry','Rz'])
-            newdf.to_excel(writer,sheet_name=sheet2_name,startrow=27,startcol=13)
-            sheet['N27'] = 'Covariance matrix from fit:'
+            newdf.to_excel(writer,sheet_name=sheet2_name,startrow=startrow+num_poses+3,startcol=13)
+            sheet['I'+str(startrow+num_poses+8)] = 'Covariance matrix from fit:'
 
         
         print('**Writing to Excel complete.**')
