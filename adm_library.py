@@ -351,6 +351,7 @@ def read_encoder_coeffs_from_file():
     return [coeffs_encoder_to_5DOF,coeffs_5DOF_to_encoder]
 
 def calculate_5DOF_from_encoders(current_encoder_values):
+    # print(current_encoder_values.loc['X'])
     terms = [current_encoder_values['X'],current_encoder_values['Y'],current_encoder_values['Z'],1,\
              current_encoder_values['X']**2,current_encoder_values['Y']**2,current_encoder_values['Z']**2,\
              current_encoder_values['X']**3,current_encoder_values['Y']**3,current_encoder_values['Z']**3,\
@@ -539,6 +540,7 @@ def pose_update_with_FDPR_results(df,shifts_from_FDPR,focal_length,GSA_angle_WCS
               (10,10,10,1,1))
 
     endpoints_residuals_baseline = endpoints_nominal - endpoints_5DOF
+    
     print('Residuals (in sMPA frame) baseline: \n',endpoints_residuals_baseline,'\n')
 
     #Important caveat here, curve_fit only handles 1D arrays.
@@ -565,7 +567,7 @@ def pose_update_with_FDPR_results(df,shifts_from_FDPR,focal_length,GSA_angle_WCS
     endpoints_residuals = endpoints_nominal - endpoints_best_fit
     print('Residuals (in sMPA frame) after incorporating the best-fit (x,y,z,Rx,Ry) shift to all poses: \n',np.round(endpoints_residuals,3),'\n')
 
-    return df_after_fitting_FDPR_shifts,endpoints_residuals,best_fit_deltas
+    return df_after_fitting_FDPR_shifts,endpoints_residuals,best_fit_deltas,best_fit_errors
 
 def pose_update_with_FDPR_results_v2(df,shifts_from_FDPR,focal_length,GSA_angle_WCS_deg,translation_to_sMPA,rotation_from_sMPA_to_5DOF):
     endpoints_5DOF = compute_endpoints(df)
@@ -612,7 +614,7 @@ def pose_update_with_FDPR_results_v2(df,shifts_from_FDPR,focal_length,GSA_angle_
     endpoints_residuals = endpoints_nominal - endpoints_best_fit
     print('Residuals after incorporating the best-fit 6DoF shift to all poses: \n',np.round(endpoints_residuals,3),'\n')
 
-    return df_after_fitting_FDPR_shifts,endpoints_residuals,best_fit_deltas
+    return df_after_fitting_FDPR_shifts,endpoints_residuals,best_fit_deltas,best_fit_errors
 
 def optimize_5DOF_rotation_for_PAT(current_AC_AZ, current_AC_EL, desired_AC_AZ, desired_AC_EL, current_GSARX, current_GSARY,print_details=False):
     transformation_matrix_az_el = np.array([[0.824126, -0.56641],
@@ -652,12 +654,18 @@ def convert_df_to_encoder_space(df,pose_select=None):
     return df_encoder_space
 
 def optimize_p_null_PAT_encoders(df_PAT_encoders,p_null_offset):
+    #Identify whether we're workinng with the sMATF or MATF
+    if 'sMATF AC AZ' in df_PAT_encoders.columns:
+        matf_target = 'sMATF'
+    elif 'MATF AC AZ' in df_PAT_encoders.columns:
+        matf_target = 'MATF'
+
     optimal_gsarx_PAT, optimal_gsary_PAT = optimize_5DOF_rotation_for_PAT(df_PAT_encoders['PAT AC AZ'].values[0], df_PAT_encoders['PAT AC EL'].values[0], 
-                                         df_PAT_encoders['sMATF AC AZ'].values[0],df_PAT_encoders['sMATF AC EL'].values[0], 
+                                         df_PAT_encoders[matf_target+' AC AZ'].values[0],df_PAT_encoders[matf_target+' AC EL'].values[0], 
                                          df_PAT_encoders['Rx'].values[0], df_PAT_encoders['Ry'].values[0],print_details=True)
 
-    optimal_htsax_PAT, optimal_vtsa_PAT = optimize_5DOF_translation_for_PAT(df_PAT_encoders['PAT Pri LED X'].values[0], df_PAT_encoders['PAT Pri LED Y'].values[0], 
-                                             df_PAT_encoders['sMATF Pri LED X'].values[0],df_PAT_encoders['sMATF Pri LED Y'].values[0], 
+    optimal_htsax_PAT, optimal_vtsa_PAT = optimize_5DOF_translation_for_PAT(df_PAT_encoders['PAT LED X'].values[0], df_PAT_encoders['PAT LED Y'].values[0], 
+                                             df_PAT_encoders[matf_target+' LED X'].values[0],df_PAT_encoders[matf_target+' LED Y'].values[0], 
                                              df_PAT_encoders['X'].values[0], df_PAT_encoders['Y'].values[0],print_details=True)
     
     additional_PAT_z_shift = -1*p_null_offset[1]*np.sin(np.deg2rad(optimal_gsarx_PAT - df_PAT_encoders['Rx'].values[0])) +\
@@ -667,45 +675,50 @@ def optimize_p_null_PAT_encoders(df_PAT_encoders,p_null_offset):
     #Update the dataframe with the new, optimal values.
     df_PAT_encoders['z_PAT'] += additional_PAT_z_shift
     df_PAT_encoders[['X','Y','Rx','Ry']] = [optimal_htsax_PAT,optimal_vtsa_PAT,optimal_gsarx_PAT,optimal_gsary_PAT]
-    df_PAT_encoders[['PAT AC AZ','PAT AC EL','PAT Pri LED X','PAT Pri LED Y']] = df_PAT_encoders[['sMATF AC AZ','sMATF AC EL','sMATF Pri LED X','sMATF Pri LED Y']]
+    df_PAT_encoders[['PAT AC AZ','PAT AC EL','PAT LED X','PAT LED Y']] = df_PAT_encoders[[matf_target+' AC AZ',matf_target+' AC EL',matf_target+' LED X',matf_target+' LED Y']]
     df_PAT_encoders[['Optimized?']] = True
     
     return df_PAT_encoders
 
-def get_data_from_ADM_log(plateau,z_type,index_name,pat_target,filepath = 'files/ADM Ops Log.xlsx',print_details=False):
+def get_data_from_ADM_log(plateau,z_type,index_name,pat_target,pat_led_type,matf_led_type,filepath = 'files/ADM Ops Log.xlsx',print_details=False):
     spreadsheet = pd.read_excel(filepath,sheet_name='Position Log - Ball',skiprows=0,usecols='A:Z',index_col=5)
     spreadsheet = spreadsheet[(spreadsheet['Plateau'] == plateau) & (spreadsheet['Final?'] == 'Y')]
+
+    if 'sMATF mirror' in spreadsheet.index:
+        matf_target = 'sMATF'
+    elif 'MATF mirror' in spreadsheet.index:
+        matf_target = 'MATF'
 
     if z_type == 'retro':
         z_type_temp = 'retro pri'
     elif z_type == 'mirror':
         z_type_temp = 'mirror'
-    df_parsed_from_ADMLog = pd.DataFrame(dict({'X':spreadsheet.loc['PAT'+pat_target+' LED pri']['5DOF X'], 'Y':spreadsheet.loc['PAT'+pat_target+' LED pri']['5DOF Y'],'Z':spreadsheet.loc['PAT'+pat_target+' LED pri']['5DOF Z'],
-                                                  'Rx':spreadsheet.loc['PAT'+pat_target+' LED pri']['5DOF Rx'],'Ry':spreadsheet.loc['PAT'+pat_target+' LED pri']['5DOF Ry'],
-                                                  'z_sMATF':spreadsheet.loc['sMATF '+z_type]['Range (m)']*1000.,
+    df_parsed_from_ADMLog = pd.DataFrame(dict({'X':spreadsheet.loc['PAT'+pat_target+' LED '+pat_led_type]['5DOF X'], 'Y':spreadsheet.loc['PAT'+pat_target+' LED '+pat_led_type]['5DOF Y'],'Z':spreadsheet.loc['PAT'+pat_target+' LED pri']['5DOF Z'],
+                                                  'Rx':spreadsheet.loc['PAT'+pat_target+' LED '+pat_led_type]['5DOF Rx'],'Ry':spreadsheet.loc['PAT'+pat_target+' LED '+pat_led_type]['5DOF Ry'],
+                                                  'z_'+matf_target:spreadsheet.loc[matf_target+' '+z_type]['Range (m)']*1000.,
                                                   'z_PAT':spreadsheet.loc['PAT'+pat_target+' '+z_type_temp]['Range (m)']*1000.,
                                                   'z_type':z_type,
-                                                  'sMATF AC AZ':spreadsheet.loc['sMATF mirror']['AC AZ (deg)'],
-                                                  'sMATF AC EL':spreadsheet.loc['sMATF mirror']['AC EL (deg)'],
+                                                  matf_target+' AC AZ':spreadsheet.loc[matf_target+' mirror']['AC AZ (deg)'],
+                                                  matf_target+' AC EL':spreadsheet.loc[matf_target+' mirror']['AC EL (deg)'],
                                                   'PAT AC AZ':spreadsheet.loc['PAT'+pat_target+' mirror']['AC AZ (deg)'],
                                                   'PAT AC EL':spreadsheet.loc['PAT'+pat_target+' mirror']['AC EL (deg)'],
-                                                  'sMATF Pri LED X':spreadsheet.loc['sMATF LED pri']['X centr (pix)'],
-                                                  'sMATF Pri LED Y':spreadsheet.loc['sMATF LED pri']['Y centr (pix)'],
-                                                  'PAT Pri LED X':spreadsheet.loc['PAT'+pat_target+' LED pri']['X centr (pix)'],
-                                                  'PAT Pri LED Y':spreadsheet.loc['PAT'+pat_target+' LED pri']['Y centr (pix)'],
-                                                  'date':spreadsheet.loc['sMATF mirror']['Date']
+                                                  matf_target+' LED X':spreadsheet.loc[matf_target+' LED '+matf_led_type]['X centr (pix)'],
+                                                  matf_target+' LED Y':spreadsheet.loc[matf_target+' LED '+matf_led_type]['Y centr (pix)'],
+                                                  'PAT LED X':spreadsheet.loc['PAT'+pat_target+' LED '+pat_led_type]['X centr (pix)'],
+                                                  'PAT LED Y':spreadsheet.loc['PAT'+pat_target+' LED '+pat_led_type]['Y centr (pix)'],
+                                                  'date':spreadsheet.loc[matf_target+' mirror']['Date']
                                                  }),index=[index_name])
     if print_details == True:
         print(df_parsed_from_ADMLog.squeeze())
     return df_parsed_from_ADMLog
 
 def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepath,
-                             columns,GSA_angle_WCS_deg,df,df_encoders,
+                             columns,sMPA_angle_to_WCS_deg,GSA_angle_WCS_deg,df,df_encoders,
                              df_update,df_update_encoders,focal_length,
                              baseline_ADM_plateau_name=None,update_ADM_plateau_name=None,
                              p_null_PAT_baseline_encoder_original=None,
                              p_null_PAT_update_encoder_original=None,
-                             rigid_body_correction=None):
+                             rigid_body_correction=None,best_fit_errors=None):
     
     charstr='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     chars=list(charstr)
@@ -723,21 +736,24 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
     sheet1_name = 'baseline'
     sheet2_name = 'update'
     with pd.ExcelWriter(filename) as writer:  
-        df.loc[index_names].to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol)
-        df_encoders.to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol+12)   
+        df.loc[index_names,['X','Y','Z','Rx','Ry']].to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol)
+        df_encoders.to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol+7)   
         sheet = writer.sheets[sheet1_name]
-        sheet[f'{chars[startcol+12]}{startrow}']='Encoders'
-        sheet[f'{chars[startcol+13]}{startrow}']='from '+baseline_filepath
+        sheet[f'{chars[startcol+7]}{startrow}']='Encoders'
+        sheet[f'{chars[startcol+8]}{startrow}']='from '+baseline_filepath
         sheet[f'{chars[startcol]}{startrow}']='Position in 5DOF space'
         sheet['B1'] = new_pose_name
-        sheet[f'{chars[startcol]}{startrow+1}'] = 'Name'
-        sheet[f'{chars[startcol+12]}{startrow+1}'] = 'Name'
+        # sheet[f'{chars[startcol]}{startrow+1}'] = 'Name'
+        # sheet[f'{chars[startcol+12]}{startrow+1}'] = 'Name'
         sheet['A27'] = 'Corresponding field points in GSA'
         sheet['A3'] = 'Track length'
         sheet['B3'] = focal_length+110
     #     sheet['A6'] = 'sMPA offset to WCS'
         newdf = df[df.index=='sMPA'][['X','Y','Z','uvec_X','uvec_Y','uvec_Z']]
         newdf.to_excel(writer,sheet_name=sheet1_name,startrow=4,startcol=0)
+        # newdf = sMPA_angle_to_WCS_deg.to_frame().transpose()
+        # newdf.columns = ['Rx','Ry','Rz']
+        # newdf.to_excel(writer,sheet_name=sheet1_name,startrow=7,startcol=0)
         sheet['A10'] = 'GSA angle to WCS'
         sheet['B10'] = GSA_angle_WCS_deg
         if 'sMask' in df.index:
@@ -755,20 +771,23 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
             p_null_PAT_baseline_encoder_original.to_excel(writer, sheet_name=sheet1_name,startrow=43,startcol=1)
 
         #Writing updated pose info to the 2nd tab      
-        df_update.loc[index_names].to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol)
-        df_update_encoders.to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol+12)   
+        df_update.loc[index_names,['X','Y','Z','Rx','Ry']].to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol)
+        df_update_encoders.to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol+7)   
         sheet = writer.sheets[sheet2_name]
-        sheet[f'{chars[startcol+12]}{startrow}']='Encoders'
+        sheet[f'{chars[startcol+7]}{startrow}']='Encoders'
         sheet[f'{chars[startcol]}{startrow}']='Position in 5DOF space'
         sheet['B1'] = new_pose_name
         sheet[f'{chars[startcol]}{startrow+1}'] = 'Name'
-        sheet[f'{chars[startcol+12]}{startrow+1}'] = 'Name'
+        sheet[f'{chars[startcol+7]}{startrow+1}'] = 'Name'
         sheet['A27'] = 'Corresponding field points in GSA'
         sheet['A3'] = 'Track length'
         sheet['B3'] = focal_length+110
     #     sheet['A6'] = 'sMPA offset to WCS'
-        newdf = df_update[df_update.index=='sMPA'][['X','Y','Z','uvec_X','uvec_Y','uvec_Z']]
-        newdf.to_excel(writer,sheet_name=sheet2_name,startrow=4,startcol=0)
+        # newdf = df_update[df_update.index=='sMPA'][['X','Y','Z','uvec_X','uvec_Y','uvec_Z']]
+        # newdf.to_excel(writer,sheet_name=sheet2_name,startrow=4,startcol=0)
+        # newdf = sMPA_angle_to_WCS_deg.to_frame().transpose()
+        # newdf.columns = ['Rx','Ry','Rz']
+        # newdf.to_excel(writer,sheet_name=sheet2_name,startrow=7,startcol=0)
         sheet['A10'] = 'GSA angle to WCS'
         sheet['B10'] = GSA_angle_WCS_deg
         if 'sMask' in df_update.index:
@@ -788,8 +807,13 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
         if update_type == 'FDPR' and rigid_body_correction is not None:
             newdf = pd.DataFrame(columns=['X','Y','Z','Rx','Ry','Rz'],index=['rigid body transform'])
             newdf.loc['rigid body transform'] = rigid_body_correction
-            newdf.to_excel(writer,sheet_name=sheet2_name,startrow=11,startcol=13)
-            sheet['N11'] = 'Best-fit rigid body transform:'
+            newdf.to_excel(writer,sheet_name=sheet2_name,startrow=23,startcol=13)
+            sheet['N23'] = 'Best-fit rigid body transform:'
+            
+            newdf = pd.DataFrame(best_fit_errors,columns=['X','Y','Z','Rx','Ry','Rz'],index=['X','Y','Z','Rx','Ry','Rz'])
+            newdf.to_excel(writer,sheet_name=sheet2_name,startrow=27,startcol=13)
+            sheet['N27'] = 'Covariance matrix from fit:'
+
         
         print('**Writing to Excel complete.**')
         print('**Filename: ',filename)
