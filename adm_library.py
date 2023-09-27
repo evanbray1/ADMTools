@@ -654,18 +654,12 @@ def convert_df_to_encoder_space(df,pose_select=None,ignored_poses=[None]):
     return df_encoder_space
 
 def optimize_p_null_PAT_encoders(df_PAT_encoders,p_null_offset):
-    #Identify whether we're workinng with the sMATF or MATF
-    if 'sMATF AC AZ' in df_PAT_encoders.columns:
-        matf_target = 'sMATF'
-    elif 'MATF AC AZ' in df_PAT_encoders.columns:
-        matf_target = 'MATF'
-
     optimal_gsarx_PAT, optimal_gsary_PAT = optimize_5DOF_rotation_for_PAT(df_PAT_encoders['PAT AC AZ'].values[0], df_PAT_encoders['PAT AC EL'].values[0], 
-                                         df_PAT_encoders[matf_target+' AC AZ'].values[0],df_PAT_encoders[matf_target+' AC EL'].values[0], 
+                                         df_PAT_encoders['s/MATF AC AZ'].values[0],df_PAT_encoders['s/MATF AC EL'].values[0], 
                                          df_PAT_encoders['Rx'].values[0], df_PAT_encoders['Ry'].values[0],print_details=True)
 
     optimal_htsax_PAT, optimal_vtsa_PAT = optimize_5DOF_translation_for_PAT(df_PAT_encoders['PAT LED X'].values[0], df_PAT_encoders['PAT LED Y'].values[0], 
-                                             df_PAT_encoders[matf_target+' LED X'].values[0],df_PAT_encoders[matf_target+' LED Y'].values[0], 
+                                             df_PAT_encoders['s/MATF LED X'].values[0],df_PAT_encoders['s/MATF LED Y'].values[0], 
                                              df_PAT_encoders['X'].values[0], df_PAT_encoders['Y'].values[0],print_details=True)
     
     additional_PAT_z_shift = -1*p_null_offset[1]*np.sin(np.deg2rad(optimal_gsarx_PAT - df_PAT_encoders['Rx'].values[0])) +\
@@ -675,7 +669,7 @@ def optimize_p_null_PAT_encoders(df_PAT_encoders,p_null_offset):
     #Update the dataframe with the new, optimal values.
     df_PAT_encoders['z_PAT'] += additional_PAT_z_shift
     df_PAT_encoders[['X','Y','Rx','Ry']] = [optimal_htsax_PAT,optimal_vtsa_PAT,optimal_gsarx_PAT,optimal_gsary_PAT]
-    df_PAT_encoders[['PAT AC AZ','PAT AC EL','PAT LED X','PAT LED Y']] = df_PAT_encoders[[matf_target+' AC AZ',matf_target+' AC EL',matf_target+' LED X',matf_target+' LED Y']]
+    df_PAT_encoders[['PAT AC AZ','PAT AC EL','PAT LED X','PAT LED Y']] = df_PAT_encoders[['s/MATF AC AZ','s/MATF AC EL','s/MATF LED X','s/MATF LED Y']]
     df_PAT_encoders[['Optimized?']] = True
     
     return df_PAT_encoders
@@ -687,7 +681,7 @@ def get_data_from_ADM_log(plateau,z_type,index_name,pat_target,pat_led_type,matf
     if 'sMATF mirror' in spreadsheet.index:
         matf_target = 'sMATF'
     elif 'MATF mirror' in spreadsheet.index:
-        matf_target = 'MATF'
+        matf_target = 'MATF'    
 
     if z_type == 'retro':
         z_type_temp = 'retro pri'
@@ -695,15 +689,15 @@ def get_data_from_ADM_log(plateau,z_type,index_name,pat_target,pat_led_type,matf
         z_type_temp = 'mirror'
     df_parsed_from_ADMLog = pd.DataFrame(dict({'X':spreadsheet.loc['PAT'+pat_target+' LED '+pat_led_type]['5DOF X'], 'Y':spreadsheet.loc['PAT'+pat_target+' LED '+pat_led_type]['5DOF Y'],'Z':spreadsheet.loc['PAT'+pat_target+' LED pri']['5DOF Z'],
                                                   'Rx':spreadsheet.loc['PAT'+pat_target+' LED '+pat_led_type]['5DOF Rx'],'Ry':spreadsheet.loc['PAT'+pat_target+' LED '+pat_led_type]['5DOF Ry'],
-                                                  'z_'+matf_target:spreadsheet.loc[matf_target+' '+z_type]['Range (m)']*1000.,
+                                                  'z_s/MATF':spreadsheet.loc[matf_target+' '+z_type]['Range (m)']*1000.,
                                                   'z_PAT':spreadsheet.loc['PAT'+pat_target+' '+z_type_temp]['Range (m)']*1000.,
                                                   'z_type':z_type,
-                                                  matf_target+' AC AZ':spreadsheet.loc[matf_target+' mirror']['AC AZ (deg)'],
-                                                  matf_target+' AC EL':spreadsheet.loc[matf_target+' mirror']['AC EL (deg)'],
+                                                  's/MATF AC AZ':spreadsheet.loc[matf_target+' mirror']['AC AZ (deg)'],
+                                                  's/MATF AC EL':spreadsheet.loc[matf_target+' mirror']['AC EL (deg)'],
                                                   'PAT AC AZ':spreadsheet.loc['PAT'+pat_target+' mirror']['AC AZ (deg)'],
                                                   'PAT AC EL':spreadsheet.loc['PAT'+pat_target+' mirror']['AC EL (deg)'],
-                                                  matf_target+' LED X':spreadsheet.loc[matf_target+' LED '+matf_led_type]['X centr (pix)'],
-                                                  matf_target+' LED Y':spreadsheet.loc[matf_target+' LED '+matf_led_type]['Y centr (pix)'],
+                                                  's/MATF LED X':spreadsheet.loc[matf_target+' LED '+matf_led_type]['X centr (pix)'],
+                                                  's/MATF LED Y':spreadsheet.loc[matf_target+' LED '+matf_led_type]['Y centr (pix)'],
                                                   'PAT LED X':spreadsheet.loc['PAT'+pat_target+' LED '+pat_led_type]['X centr (pix)'],
                                                   'PAT LED Y':spreadsheet.loc['PAT'+pat_target+' LED '+pat_led_type]['Y centr (pix)'],
                                                   'date':spreadsheet.loc[matf_target+' mirror']['Date']
@@ -729,8 +723,6 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
     index_names = [val for val in df.index if val not in ignored_poses]
 
     gsa_rot = R.from_euler('X',[GSA_angle_WCS_deg], degrees=True)
-    # uvec = np.array([0.,0.,dz_update]+p_null_offset)
-    #rot_uvec = gsa_rot.apply(uvec) #np.dot(gsa_rot.as_matrix(),uvec)
 
     filename = filename
     sheet1_name = 'baseline'
