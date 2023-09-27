@@ -718,7 +718,7 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
                              baseline_ADM_plateau_name=None,update_ADM_plateau_name=None,
                              p_null_PAT_baseline_encoder_original=None,
                              p_null_PAT_update_encoder_original=None,
-                             rigid_body_correction=None,best_fit_errors=None):
+                             rigid_body_correction=None,best_fit_errors=None,ignored_poses=['None']):
     
     charstr='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     chars=list(charstr)
@@ -726,7 +726,6 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
 
     startrow = 15
     startcol = 1
-    ignored_poses = ['sMask','PATB','sMPA','sMATF','PATB_update','sMATF_update']
     index_names = [val for val in df.index if val not in ignored_poses]
 
     gsa_rot = R.from_euler('X',[GSA_angle_WCS_deg], degrees=True)
@@ -738,7 +737,7 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
     sheet2_name = 'update'
     with pd.ExcelWriter(filename) as writer:  
         df.loc[index_names,['X','Y','Z','Rx','Ry']].to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol)
-        df_encoders.to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol+7)   
+        df_encoders.loc[index_names,['X','Y','Z','Rx','Ry']].to_excel(writer, sheet_name=sheet1_name,startrow=startrow,startcol=startcol+7)   
         sheet = writer.sheets[sheet1_name]
         sheet[f'{chars[startcol+7]}{startrow}']='Encoders'
         sheet[f'{chars[startcol+8]}{startrow}']='from '+baseline_filepath
@@ -773,7 +772,7 @@ def write_new_poses_to_Excel(filename,new_pose_name,update_type,baseline_filepat
 
         #Writing updated pose info to the 2nd tab      
         df_update.loc[index_names,['X','Y','Z','Rx','Ry']].to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol)
-        df_update_encoders.to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol+7)   
+        df_update_encoders.loc[index_names,['X','Y','Z','Rx','Ry']].to_excel(writer, sheet_name=sheet2_name,startrow=startrow,startcol=startcol+7)   
         sheet = writer.sheets[sheet2_name]
         sheet[f'{chars[startcol+7]}{startrow}']='Encoders'
         sheet[f'{chars[startcol]}{startrow}']='Position in 5DOF space'
